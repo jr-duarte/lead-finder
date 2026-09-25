@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Mail,
   MapPin,
+  KanbanSquare,
   Pencil,
   Phone,
   Share2,
@@ -32,6 +33,9 @@ import {
 import { BusinessEditDialog } from "@/components/businesses/business-edit-dialog"
 import { BusinessStatusBadge } from "@/components/businesses/business-status-badge"
 import { ErrorState } from "@/components/common/error-state"
+import { BusinessNotes } from "@/components/notes/business-notes"
+import { PipelineStageBadge } from "@/components/pipeline/pipeline-stage-badge"
+import { PipelineStageSelect } from "@/components/pipeline/pipeline-stage-select"
 import {
   formatDateTime,
   formatNumber,
@@ -42,6 +46,7 @@ import {
 import { OPERATIONAL_STATUS_LABELS } from "@/domain/business"
 import type { BusinessDTO } from "@/types/api"
 import { useBusiness, useEnrichBusinesses } from "@/viewmodels/use-businesses"
+import { useAddToPipeline, useChangeStage } from "@/viewmodels/use-pipeline"
 
 /** Label/value row used across the detail tabs. */
 function Field({
@@ -66,6 +71,8 @@ function Fallback() {
 export function BusinessDetailView({ id }: { id: string }) {
   const { data, isPending, isError, error, refetch } = useBusiness(id)
   const enrich = useEnrichBusinesses()
+  const addToPipeline = useAddToPipeline()
+  const changeStage = useChangeStage(id)
   const [isEditing, setIsEditing] = React.useState(false)
 
   if (isError) {
@@ -110,6 +117,9 @@ export function BusinessDetailView({ id }: { id: string }) {
                 {business.name}
               </h1>
               <BusinessStatusBadge status={business.status} />
+              {business.pipeline ? (
+                <PipelineStageBadge stage={business.pipeline.stage} />
+              ) : null}
               {business.operationalStatus &&
               business.operationalStatus !== "OPERATIONAL" ? (
                 <Badge
@@ -165,6 +175,23 @@ export function BusinessDetailView({ id }: { id: string }) {
               ) : null}
             </Tooltip>
 
+            {business.pipeline ? (
+              <PipelineStageSelect
+                stage={business.pipeline.stage}
+                onChange={(stage) => changeStage.mutate(stage)}
+                disabled={changeStage.isPending}
+              />
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => addToPipeline.mutate({ ids: [business.id] })}
+                disabled={addToPipeline.isPending}
+              >
+                <KanbanSquare className="size-4" />
+                Adicionar ao funil
+              </Button>
+            )}
+
             <Button variant="outline" onClick={() => setIsEditing(true)}>
               <Pencil className="size-4" />
               Editar
@@ -179,6 +206,7 @@ export function BusinessDetailView({ id }: { id: string }) {
           <TabsTrigger value="contact">Contato</TabsTrigger>
           <TabsTrigger value="location">Localização</TabsTrigger>
           <TabsTrigger value="enrichment">Enriquecimento</TabsTrigger>
+          <TabsTrigger value="notes">Anotações</TabsTrigger>
           <TabsTrigger value="history">Histórico</TabsTrigger>
         </TabsList>
 
@@ -479,6 +507,15 @@ export function BusinessDetailView({ id }: { id: string }) {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="notes" className="pt-4">
+          <BusinessNotes
+            businessId={business.id}
+            stage={business.pipeline?.stage}
+            onStageChange={(stage) => changeStage.mutate(stage)}
+            isChangingStage={changeStage.isPending}
+          />
         </TabsContent>
 
         <TabsContent value="history" className="pt-4">

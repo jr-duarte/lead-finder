@@ -7,6 +7,7 @@ import {
 } from "mongoose"
 
 import { BUSINESS_STATUS } from "@/domain/business"
+import { PIPELINE_STAGES } from "@/domain/pipeline"
 
 const addressSchema = new Schema(
   {
@@ -53,6 +54,17 @@ const enrichmentSchema = new Schema(
   { _id: false }
 )
 
+const pipelineSchema = new Schema(
+  {
+    stage: { type: String, enum: PIPELINE_STAGES, required: true },
+    position: { type: Number, default: 0 },
+    enteredAt: { type: Date, default: () => new Date() },
+    movedAt: Date,
+    note: String,
+  },
+  { _id: false }
+)
+
 const businessSchema = new Schema(
   {
     externalId: { type: String, required: true },
@@ -77,6 +89,7 @@ const businessSchema = new Schema(
     },
     searchIds: { type: [Schema.Types.ObjectId], default: [], ref: "Search" },
     collectedAt: { type: Date, default: () => new Date(), index: true },
+    pipeline: { type: pipelineSchema, default: undefined },
   },
   { timestamps: true, collection: "businesses" }
 )
@@ -88,6 +101,8 @@ businessSchema.index({ name: "text", category: "text" })
 businessSchema.index({ "address.city": 1, "address.state": 1 })
 businessSchema.index({ rating: -1 })
 businessSchema.index({ website: 1 })
+// Board queries read one column at a time, ordered by manual position.
+businessSchema.index({ "pipeline.stage": 1, "pipeline.position": 1 })
 
 export type BusinessDocument = InferSchemaType<typeof businessSchema>
 

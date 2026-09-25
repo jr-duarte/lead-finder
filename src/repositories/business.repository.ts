@@ -1,7 +1,11 @@
-import type { PipelineStage, QueryFilter } from "mongoose"
+import type {
+  PipelineStage as MongoosePipelineStage,
+  QueryFilter,
+} from "mongoose"
 import { Types } from "mongoose"
 
 import type { Business } from "@/domain/business"
+import type { PipelineStage } from "@/domain/pipeline"
 import { connectToDatabase } from "@/lib/mongoose"
 import { BusinessModel, type BusinessDocument } from "@/models/business.model"
 import type { BusinessFilters, Presence } from "@/schemas/business"
@@ -96,6 +100,14 @@ export function buildBusinessQuery(
     and.push({ status: filters.status })
   }
 
+  if (filters.pipelineStage) {
+    and.push({ "pipeline.stage": filters.pipelineStage })
+  } else if (filters.pipeline === "in") {
+    and.push({ pipeline: { $exists: true } })
+  } else if (filters.pipeline === "out") {
+    and.push({ pipeline: { $exists: false } })
+  }
+
   // Closed businesses never convert, so they can be excluded from a view.
   if (filters.hideClosed) {
     and.push({
@@ -164,6 +176,15 @@ function toBusiness(raw: RawBusiness): Business {
     },
     status: raw.status,
     searchIds: (raw.searchIds ?? []).map(String),
+    pipeline: raw.pipeline
+      ? {
+          stage: raw.pipeline.stage as PipelineStage,
+          position: raw.pipeline.position ?? 0,
+          enteredAt: raw.pipeline.enteredAt ?? new Date(),
+          movedAt: raw.pipeline.movedAt ?? undefined,
+          note: raw.pipeline.note ?? undefined,
+        }
+      : undefined,
     collectedAt: raw.collectedAt ?? new Date(),
     updatedAt: raw.updatedAt ?? new Date(),
   }
@@ -197,6 +218,24 @@ export const businessRepository = {
       pageSize: filters.pageSize,
       totalPages: Math.max(1, Math.ceil(total / filters.pageSize)),
     }
+  },
+
+  /**
+   * Creates a lead entered by hand. The external id is generated locally so
+   * it never collides with ids coming from a collection source.
+   */
+  async create(input: Record<string, unknown>): Promise<Business> {
+    await connectToDatabase()
+
+    const created = await BusinessModel.create({
+      ...input,
+      source: "manual",
+      externalId: `manual-${new Types.ObjectId().toString()}`,
+      collectedAt: new Date(),
+      status: "NEW",
+    })
+
+    return toBusiness(created.toObject() as RawBusiness)
   },
 
   async findById(id: string): Promise<Business | null> {
@@ -289,7 +328,7 @@ export const businessRepository = {
       ],
     })
 
-    const pipeline: PipelineStage[] = [
+    const pipeline: MongoosePipelineStage[] = [
       {
         $group: {
           _id: null,

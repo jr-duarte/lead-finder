@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Download, Sparkles, Trash2, X } from "lucide-react"
+import { Download, KanbanSquare, Sparkles, Trash2, X } from "lucide-react"
 
 import {
   AlertDialog,
@@ -22,6 +22,7 @@ export function BusinessBulkActions({
   count,
   onClear,
   onEnrich,
+  onAddToPipeline,
   onExport,
   onDelete,
   isEnriching,
@@ -30,6 +31,7 @@ export function BusinessBulkActions({
   count: number
   onClear: () => void
   onEnrich: () => void
+  onAddToPipeline: () => void
   onExport: () => void
   onDelete: () => void
   isEnriching?: boolean
@@ -51,6 +53,11 @@ export function BusinessBulkActions({
         <Button size="sm" onClick={onEnrich} disabled={isEnriching}>
           <Sparkles className="size-4" />
           {isEnriching ? "Enriquecendo..." : "Enriquecer"}
+        </Button>
+
+        <Button size="sm" variant="outline" onClick={onAddToPipeline}>
+          <KanbanSquare className="size-4" />
+          Enviar para o funil
         </Button>
 
         <Button size="sm" variant="outline" onClick={onExport}>

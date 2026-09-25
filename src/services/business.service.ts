@@ -7,7 +7,13 @@ import {
   businessRepository,
   type Paginated,
 } from "@/repositories/business.repository"
-import type { BusinessFilters, BusinessUpdateInput } from "@/schemas/business"
+import { noteRepository } from "@/repositories/note.repository"
+import { pipelineRepository } from "@/repositories/pipeline.repository"
+import type {
+  BusinessCreateInput,
+  BusinessFilters,
+  BusinessUpdateInput,
+} from "@/schemas/business"
 
 /** ISO date without the time part, for spreadsheet-friendly columns. */
 function isoDay(value?: Date | string | null): string {
@@ -24,6 +30,27 @@ function operationalLabel(business: Business): string {
 export const businessService = {
   list(filters: BusinessFilters): Promise<Paginated<Business>> {
     return businessRepository.list(filters)
+  },
+
+  /** Creates a lead typed in by the user, optionally putting it on the board. */
+  async create(input: BusinessCreateInput): Promise<Business> {
+    const { instagram, email, addToPipeline, ...rest } = input
+
+    const business = await businessRepository.create({
+      ...rest,
+      enrichment: {
+        emails: email ? [email] : [],
+        socials: instagram ? { instagram } : {},
+        technologies: [],
+      },
+    })
+
+    if (addToPipeline) {
+      await pipelineRepository.add([business.id], "NEW")
+      return (await businessRepository.findById(business.id)) ?? business
+    }
+
+    return business
   },
 
   getById(id: string): Promise<Business | null> {
@@ -55,7 +82,9 @@ export const businessService = {
     return businessRepository.update(id, patch)
   },
 
-  deleteMany(ids: string[]): Promise<number> {
+  async deleteMany(ids: string[]): Promise<number> {
+    // Notes belong to the business, so they go with it.
+    await noteRepository.removeByBusiness(ids)
     return businessRepository.deleteMany(ids)
   },
 

@@ -20,6 +20,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   businesses: "Empresas",
   searches: "Buscas",
   enrichment: "Enriquecimento",
+  pipeline: "Funil",
   settings: "Configurações",
   new: "Nova",
 }

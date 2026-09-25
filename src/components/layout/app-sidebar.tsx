@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Building2,
+  KanbanSquare,
   LayoutDashboard,
   Search,
   Settings,
@@ -38,6 +39,7 @@ const LEADS: NavItem[] = [
   { title: "Empresas", href: "/businesses", icon: Building2 },
   { title: "Buscas", href: "/searches", icon: Search },
   { title: "Enriquecimento", href: "/enrichment", icon: Sparkles },
+  { title: "Funil", href: "/pipeline", icon: KanbanSquare },
 ]
 
 const SYSTEM: NavItem[] = [

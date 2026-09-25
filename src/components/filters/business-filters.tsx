@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select"
 import { Combobox } from "@/components/filters/combobox"
 import { DateRangeFilter } from "@/components/filters/date-range-filter"
+import { PIPELINE_COLUMNS, PIPELINE_STAGE_LABELS } from "@/domain/pipeline"
 import type { FiltersState } from "@/viewmodels/use-business-filters"
 import type { FilterOptionsDTO } from "@/types/api"
 
@@ -193,6 +194,35 @@ export function BusinessFilters({
               {PRESENCE_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label} Instagram
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-muted-foreground text-xs">Funil</Label>
+          <Select
+            value={filters.pipelineStage || filters.pipeline}
+            onValueChange={(value) => {
+              // A stage implies being on the board, so the two are set together.
+              if (value === "any" || value === "in" || value === "out") {
+                onChange({ pipeline: value, pipelineStage: "" })
+              } else {
+                onChange({ pipeline: "in", pipelineStage: value })
+              }
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any">Todas</SelectItem>
+              <SelectItem value="in">No funil</SelectItem>
+              <SelectItem value="out">Fora do funil</SelectItem>
+              {PIPELINE_COLUMNS.map((stage) => (
+                <SelectItem key={stage} value={stage}>
+                  Etapa: {PIPELINE_STAGE_LABELS[stage]}
                 </SelectItem>
               ))}
             </SelectContent>

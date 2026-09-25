@@ -9,6 +9,7 @@ import {
   Building2,
   ExternalLink,
   Eye,
+  KanbanSquare,
   MoreHorizontal,
   Pencil,
   Sparkles,
@@ -46,6 +47,7 @@ import {
 } from "@/domain/business"
 import { BusinessStatusBadge } from "@/components/businesses/business-status-badge"
 import { BusinessTableSkeleton } from "@/components/businesses/business-table-skeleton"
+import { PipelineStageBadge } from "@/components/pipeline/pipeline-stage-badge"
 import { EmptyState } from "@/components/common/empty-state"
 import {
   formatDate,
@@ -107,6 +109,7 @@ export function BusinessTable({
   sortDir,
   onSort,
   onEnrich,
+  onAddToPipeline,
   onEdit,
   emptyAction,
   hasActiveFilters,
@@ -120,6 +123,7 @@ export function BusinessTable({
   sortDir: string
   onSort: (column: SortableColumn) => void
   onEnrich: (id: string) => void
+  onAddToPipeline: (id: string) => void
   onEdit: (business: BusinessDTO) => void
   emptyAction?: ReactNode
   hasActiveFilters?: boolean
@@ -319,6 +323,9 @@ export function BusinessTable({
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1">
                         <BusinessStatusBadge status={business.status} />
+                        {business.pipeline ? (
+                          <PipelineStageBadge stage={business.pipeline.stage} />
+                        ) : null}
                         {business.operationalStatus &&
                         business.operationalStatus !== "OPERATIONAL" ? (
                           <Tooltip>
@@ -380,6 +387,15 @@ export function BusinessTable({
                           >
                             <Sparkles className="size-4" />
                             Enriquecer
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => onAddToPipeline(business.id)}
+                            disabled={Boolean(business.pipeline)}
+                          >
+                            <KanbanSquare className="size-4" />
+                            {business.pipeline
+                              ? "Já está no funil"
+                              : "Adicionar ao funil"}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

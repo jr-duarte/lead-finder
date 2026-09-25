@@ -18,6 +18,8 @@ export type FiltersState = {
   collectedFrom: string
   collectedTo: string
   hideClosed: string
+  pipeline: string
+  pipelineStage: string
   sortBy: string
   sortDir: string
   page: number
@@ -37,6 +39,8 @@ export const DEFAULT_FILTERS: FiltersState = {
   collectedFrom: "",
   collectedTo: "",
   hideClosed: "true",
+  pipeline: "any",
+  pipelineStage: "",
   sortBy: "collectedAt",
   sortDir: "desc",
   page: 1,
@@ -72,6 +76,8 @@ export function useBusinessFilters() {
       collectedFrom: read("collectedFrom"),
       collectedTo: read("collectedTo"),
       hideClosed: read("hideClosed"),
+      pipeline: read("pipeline"),
+      pipelineStage: read("pipelineStage"),
       sortBy: read("sortBy"),
       sortDir: read("sortDir"),
       page: Number(searchParams.get("page") ?? 1),
@@ -148,6 +154,10 @@ export function useBusinessFilters() {
       collectedTo: filters.collectedTo || undefined,
       // Only sent when opting out, since the API already defaults to hiding.
       hideClosed: filters.hideClosed === "false" ? "false" : undefined,
+      pipeline: filters.pipeline as BusinessFiltersInput["pipeline"],
+      pipelineStage:
+        (filters.pipelineStage as BusinessFiltersInput["pipelineStage"]) ||
+        undefined,
       sortBy: filters.sortBy as BusinessFiltersInput["sortBy"],
       sortDir: filters.sortDir as BusinessFiltersInput["sortDir"],
       page: filters.page,

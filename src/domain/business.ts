@@ -1,3 +1,5 @@
+import type { PipelineEntry } from "@/domain/pipeline"
+
 /**
  * Core domain definitions for a collected business/establishment.
  * Pure TypeScript: no Mongoose, no React, no I/O.
@@ -94,6 +96,8 @@ export type Business = {
   enrichment: BusinessEnrichment
   status: BusinessStatus
   searchIds: string[]
+  /** Present only when the lead was added to the prospecting board. */
+  pipeline?: PipelineEntry
   collectedAt: Date
   updatedAt: Date
 }

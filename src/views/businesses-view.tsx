@@ -3,10 +3,11 @@
 import Link from "next/link"
 import * as React from "react"
 import { toast } from "sonner"
-import { Plus } from "lucide-react"
+import { Plus, Search } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { BusinessBulkActions } from "@/components/businesses/business-bulk-actions"
+import { BusinessCreateDialog } from "@/components/businesses/business-create-dialog"
 import { BusinessEditDialog } from "@/components/businesses/business-edit-dialog"
 import { BusinessTable } from "@/components/businesses/business-table"
 import { DataPagination } from "@/components/common/data-pagination"
@@ -22,6 +23,7 @@ import {
   useFilterOptions,
 } from "@/viewmodels/use-businesses"
 import { useBusinessFilters } from "@/viewmodels/use-business-filters"
+import { useAddToPipeline } from "@/viewmodels/use-pipeline"
 
 export function BusinessesView() {
   const {
@@ -40,6 +42,8 @@ export function BusinessesView() {
 
   const [selection, setSelection] = React.useState<string[]>([])
   const [editing, setEditing] = React.useState<BusinessDTO | null>(null)
+  const [isCreating, setIsCreating] = React.useState(false)
+  const addToPipeline = useAddToPipeline()
 
   const items = React.useMemo(
     () => businessesQuery.data?.items ?? [],
@@ -112,12 +116,18 @@ export function BusinessesView() {
         title="Empresas"
         description="Todas as empresas coletadas, com filtros combináveis."
         actions={
-          <Button asChild>
-            <Link href="/searches/new">
+          <>
+            <Button variant="outline" onClick={() => setIsCreating(true)}>
               <Plus className="size-4" />
-              Nova busca
-            </Link>
-          </Button>
+              Nova empresa
+            </Button>
+            <Button asChild>
+              <Link href="/searches/new">
+                <Search className="size-4" />
+                Nova busca
+              </Link>
+            </Button>
+          </>
         }
       />
 
@@ -135,6 +145,10 @@ export function BusinessesView() {
         count={selectedIds.length}
         onClear={() => setSelection([])}
         onEnrich={handleBulkEnrich}
+        onAddToPipeline={async () => {
+          await addToPipeline.mutateAsync({ ids: selectedIds })
+          setSelection([])
+        }}
         onExport={() => exportBusinessesCsv(queryInput)}
         onDelete={handleBulkDelete}
         isEnriching={enrich.isPending}
@@ -166,6 +180,7 @@ export function BusinessesView() {
             sortDir={filters.sortDir}
             onSort={handleSort}
             onEnrich={(id) => enrich.mutate({ ids: [id] })}
+            onAddToPipeline={(id) => addToPipeline.mutate({ ids: [id] })}
             onEdit={setEditing}
             hasActiveFilters={hasActiveFilters}
             emptyAction={
@@ -190,6 +205,8 @@ export function BusinessesView() {
           ) : null}
         </>
       )}
+
+      <BusinessCreateDialog open={isCreating} onOpenChange={setIsCreating} />
 
       <BusinessEditDialog
         business={editing}

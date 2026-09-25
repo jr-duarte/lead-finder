@@ -1,4 +1,5 @@
 import type { Business } from "@/domain/business"
+import type { Note } from "@/domain/note"
 import type { EnrichmentJob } from "@/domain/enrichment-job"
 import type { Search } from "@/domain/search"
 
@@ -79,3 +80,14 @@ export type SourceInfoDTO = {
   requiresCoordinates: boolean
   hasRatings: boolean
 }
+
+export type BoardColumnDTO = {
+  stage: import("@/domain/pipeline").PipelineStage
+  label: string
+  cards: BusinessDTO[]
+}
+
+export type BoardDTO = { columns: BoardColumnDTO[] }
+
+export type NoteDTO = Serialized<Note>
+export type NotesDTO = { notes: NoteDTO[] }
