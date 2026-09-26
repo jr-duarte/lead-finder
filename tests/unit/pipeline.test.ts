@@ -1,22 +1,30 @@
-import { MongoMemoryServer } from "mongodb-memory-server"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 
+import { startTestDatabase } from "../helpers/db"
+
 import { isClosedStage, PIPELINE_COLUMNS } from "@/domain/pipeline"
-import { connectToDatabase, disconnectFromDatabase } from "@/lib/mongoose"
 import { BusinessModel } from "@/models/business.model"
 import { pipelineRepository } from "@/repositories/pipeline.repository"
+import { dashboardService } from "@/services/dashboard.service"
 import { pipelineService } from "@/services/pipeline.service"
 import { businessCreateSchema } from "@/schemas/business"
 import { addToPipelineSchema, moveCardSchema } from "@/schemas/pipeline"
 
-let server: MongoMemoryServer
+let database: Awaited<ReturnType<typeof startTestDatabase>>
+
+/**
+ * Counter-based ids: two seed() calls in the same millisecond would otherwise
+ * collide on the unique (source, externalId) index and silently insert fewer
+ * documents than requested.
+ */
+let seedCounter = 0
 
 async function seed(names: string[]): Promise<string[]> {
   const docs = await BusinessModel.insertMany(
-    names.map((name, index) => ({
+    names.map((name) => ({
       name,
       source: "manual",
-      externalId: `seed-${index}-${Date.now()}`,
+      externalId: `seed-${(seedCounter += 1)}`,
       collectedAt: new Date(),
     }))
   )
@@ -24,14 +32,11 @@ async function seed(names: string[]): Promise<string[]> {
 }
 
 beforeAll(async () => {
-  server = await MongoMemoryServer.create()
-  process.env.MONGODB_URI = server.getUri("pipeline-test")
-  await connectToDatabase()
+  database = await startTestDatabase("pipeline")
 }, 120_000)
 
 afterAll(async () => {
-  await disconnectFromDatabase()
-  await server.stop()
+  await database.stop()
 })
 
 afterEach(async () => {
@@ -219,5 +224,83 @@ describe("alterar etapa fora do board", () => {
     const board = await pipelineRepository.board()
     expect(board).toHaveLength(1)
     expect(board[0].pipeline?.stage).toBe("LOST")
+  })
+})
+
+describe("métricas do funil no dashboard", () => {
+  it("separa ganhos, perdidos e em andamento", async () => {
+    const ids = await seed(["A", "B", "C", "D", "E"])
+    await pipelineRepository.add(ids, "NEW")
+
+    await pipelineRepository.move(ids[0], "WON")
+    await pipelineRepository.move(ids[1], "WON")
+    await pipelineRepository.move(ids[2], "LOST")
+    await pipelineRepository.move(ids[3], "MEETING")
+    // ids[4] stays in NEW.
+
+    const { funnel } = await dashboardService.getData()
+
+    expect(funnel.won).toBe(2)
+    expect(funnel.lost).toBe(1)
+    // Every open stage rolls into a single number.
+    expect(funnel.inProgress).toBe(2)
+  })
+
+  it("o total cobre todo o board", async () => {
+    const ids = await seed(["A", "B", "C"])
+    await pipelineRepository.add(ids, "NEW")
+    await pipelineRepository.move(ids[0], "WON")
+
+    const { funnel } = await dashboardService.getData()
+
+    expect(funnel.total).toBe(3)
+    expect(funnel.won + funnel.lost + funnel.inProgress).toBe(funnel.total)
+  })
+
+  it("calcula a conversão sobre as encerradas, não sobre o total", async () => {
+    const ids = await seed(["A", "B", "C", "D"])
+    await pipelineRepository.add(ids, "NEW")
+
+    await pipelineRepository.move(ids[0], "WON")
+    await pipelineRepository.move(ids[1], "WON")
+    await pipelineRepository.move(ids[2], "LOST")
+    // ids[3] is still open and must not dilute the rate.
+
+    const { funnel } = await dashboardService.getData()
+
+    expect(funnel.winRate).toBeCloseTo(66.67, 1)
+  })
+
+  it("não divide por zero quando nada foi encerrado", async () => {
+    const ids = await seed(["A"])
+    await pipelineRepository.add(ids, "NEW")
+
+    const { funnel } = await dashboardService.getData()
+
+    expect(funnel.winRate).toBe(0)
+    expect(funnel.inProgress).toBe(1)
+  })
+
+  it("zera quando o funil está vazio", async () => {
+    const { funnel } = await dashboardService.getData()
+
+    expect(funnel).toMatchObject({
+      won: 0,
+      lost: 0,
+      inProgress: 0,
+      total: 0,
+      winRate: 0,
+    })
+  })
+
+  it("ignora empresas que não estão no funil", async () => {
+    await seed(["Fora do funil"])
+    const [dentro] = await seed(["No funil"])
+    await pipelineRepository.add([dentro], "WON")
+
+    const { funnel } = await dashboardService.getData()
+
+    expect(funnel.total).toBe(1)
+    expect(funnel.won).toBe(1)
   })
 })

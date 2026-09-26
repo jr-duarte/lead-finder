@@ -4,7 +4,6 @@ import { Monitor, Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 import * as React from "react"
 
-import { Badge } from "@/components/ui/badge"
 import {
   Card,
   CardContent,
@@ -14,54 +13,13 @@ import {
 } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
 import { PageHeader } from "@/components/layout/page-header"
 
 const THEMES = [
   { value: "light", label: "Claro", icon: Sun },
   { value: "dark", label: "Escuro", icon: Moon },
   { value: "system", label: "Sistema", icon: Monitor },
-]
-
-const ENV_VARS = [
-  {
-    name: "MONGODB_URI",
-    description: "String de conexão do MongoDB.",
-    example: "mongodb://127.0.0.1:27017/lead-finder",
-  },
-  {
-    name: "PLACES_SOURCE",
-    description:
-      "Fonte de coleta: 'mock' (offline, determinística) ou 'osm' (OpenStreetMap).",
-    example: "mock",
-  },
-  {
-    name: "OVERPASS_ENDPOINT",
-    description: "Endpoint da API Overpass usada pela fonte 'osm'.",
-    example: "https://overpass-api.de/api/interpreter",
-  },
-  {
-    name: "CRAWLER_CONCURRENCY",
-    description: "Requisições simultâneas durante o enriquecimento.",
-    example: "2",
-  },
-  {
-    name: "CRAWLER_REQUEST_DELAY_MS",
-    description: "Intervalo mínimo entre requisições, em milissegundos.",
-    example: "1200",
-  },
-  {
-    name: "CRAWLER_TIMEOUT_MS",
-    description: "Tempo limite de cada requisição, em milissegundos.",
-    example: "15000",
-  },
 ]
 
 export function SettingsView() {
@@ -79,7 +37,7 @@ export function SettingsView() {
     <div className="mx-auto w-full max-w-3xl space-y-6">
       <PageHeader
         title="Configurações"
-        description="Preferências de interface e referência de ambiente."
+        description="Preferências de interface."
       />
 
       <Card>
@@ -115,46 +73,6 @@ export function SettingsView() {
               ))}
             </RadioGroup>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Variáveis de ambiente</CardTitle>
-          <CardDescription>
-            Configuradas em <code className="text-xs">.env.local</code>.
-            Reinicie o servidor após alterá-las.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Accordion type="single" collapsible className="w-full">
-            {ENV_VARS.map((variable) => (
-              <AccordionItem key={variable.name} value={variable.name}>
-                <AccordionTrigger className="text-sm">
-                  <span className="font-mono text-xs">{variable.name}</span>
-                </AccordionTrigger>
-                <AccordionContent className="space-y-2">
-                  <p className="text-muted-foreground text-sm">
-                    {variable.description}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">padrão</Badge>
-                    <code className="bg-muted rounded px-1.5 py-0.5 text-xs">
-                      {variable.example}
-                    </code>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-
-          <Separator className="my-4" />
-
-          <p className="text-muted-foreground text-xs">
-            Todos os estabelecimentos encontrados são armazenados, com ou sem
-            website. Os filtros de &quot;sem website&quot; são aplicados apenas
-            na consulta.
-          </p>
         </CardContent>
       </Card>
     </div>

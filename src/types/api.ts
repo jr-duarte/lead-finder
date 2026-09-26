@@ -41,6 +41,13 @@ export type DashboardDTO = {
     withInstagram: number
     totalSearches: number
   }
+  funnel: {
+    won: number
+    lost: number
+    inProgress: number
+    total: number
+    winRate: number
+  }
   avgRating: number
   topCategories: { category: string; count: number }[]
   timeline: { date: string; count: number }[]

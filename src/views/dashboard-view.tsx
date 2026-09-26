@@ -34,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { CollectionChart } from "@/components/dashboard/collection-chart"
+import { FunnelSummary } from "@/components/dashboard/funnel-summary"
 import { KpiCard } from "@/components/dashboard/kpi-card"
 import { EmptyState } from "@/components/common/empty-state"
 import { ErrorState } from "@/components/common/error-state"
@@ -80,63 +81,71 @@ export function DashboardView() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Total de empresas"
-          value={total}
-          icon={Building2}
-          isLoading={isPending}
-        />
-        <KpiCard
-          label="Sem website"
-          value={kpis?.withoutWebsite ?? 0}
-          icon={GlobeLock}
-          share={share(kpis?.withoutWebsite ?? 0)}
-          hint="Empresas sem site são o principal alvo de prospecção."
-          isLoading={isPending}
-        />
-        <KpiCard
-          label="Com website"
-          value={kpis?.withWebsite ?? 0}
-          icon={Globe}
-          share={share(kpis?.withWebsite ?? 0)}
-          isLoading={isPending}
-        />
-        <KpiCard
-          label="Enriquecidas"
-          value={kpis?.enriched ?? 0}
-          icon={Sparkles}
-          share={share(kpis?.enriched ?? 0)}
-          hint="Empresas cujo site já foi processado."
-          isLoading={isPending}
-        />
-        <KpiCard
-          label="Com telefone"
-          value={kpis?.withPhone ?? 0}
-          icon={Phone}
-          share={share(kpis?.withPhone ?? 0)}
-          isLoading={isPending}
-        />
-        <KpiCard
-          label="Com Instagram"
-          value={kpis?.withInstagram ?? 0}
-          icon={AtSign}
-          share={share(kpis?.withInstagram ?? 0)}
-          isLoading={isPending}
-        />
-        <KpiCard
-          label="Total de buscas"
-          value={kpis?.totalSearches ?? 0}
-          icon={Search}
-          isLoading={isPending}
-        />
-        <KpiCard
-          label="Rating médio"
-          value={formatRating(data?.avgRating)}
-          icon={Star}
-          hint="Média das avaliações das empresas com rating."
-          isLoading={isPending}
-        />
+      <FunnelSummary data={data?.funnel} isLoading={isPending} />
+
+      <div className="space-y-3">
+        <h2 className="text-muted-foreground text-sm font-medium">
+          Base coletada
+        </h2>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            label="Total de empresas"
+            value={total}
+            icon={Building2}
+            isLoading={isPending}
+          />
+          <KpiCard
+            label="Sem website"
+            value={kpis?.withoutWebsite ?? 0}
+            icon={GlobeLock}
+            share={share(kpis?.withoutWebsite ?? 0)}
+            hint="Empresas sem site são o principal alvo de prospecção."
+            isLoading={isPending}
+          />
+          <KpiCard
+            label="Com website"
+            value={kpis?.withWebsite ?? 0}
+            icon={Globe}
+            share={share(kpis?.withWebsite ?? 0)}
+            isLoading={isPending}
+          />
+          <KpiCard
+            label="Enriquecidas"
+            value={kpis?.enriched ?? 0}
+            icon={Sparkles}
+            share={share(kpis?.enriched ?? 0)}
+            hint="Empresas cujo site já foi processado."
+            isLoading={isPending}
+          />
+          <KpiCard
+            label="Com telefone"
+            value={kpis?.withPhone ?? 0}
+            icon={Phone}
+            share={share(kpis?.withPhone ?? 0)}
+            isLoading={isPending}
+          />
+          <KpiCard
+            label="Com Instagram"
+            value={kpis?.withInstagram ?? 0}
+            icon={AtSign}
+            share={share(kpis?.withInstagram ?? 0)}
+            isLoading={isPending}
+          />
+          <KpiCard
+            label="Total de buscas"
+            value={kpis?.totalSearches ?? 0}
+            icon={Search}
+            isLoading={isPending}
+          />
+          <KpiCard
+            label="Rating médio"
+            value={formatRating(data?.avgRating)}
+            icon={Star}
+            hint="Média das avaliações das empresas com rating."
+            isLoading={isPending}
+          />
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

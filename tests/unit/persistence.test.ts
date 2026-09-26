@@ -1,7 +1,7 @@
-import { MongoMemoryServer } from "mongodb-memory-server"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 
-import { connectToDatabase, disconnectFromDatabase } from "@/lib/mongoose"
+import { startTestDatabase } from "../helpers/db"
+
 import { businessRepository } from "@/repositories/business.repository"
 import { businessService } from "@/services/business.service"
 import { BusinessModel } from "@/models/business.model"
@@ -9,7 +9,7 @@ import { businessFiltersSchema } from "@/schemas/business"
 import { persistPlaces } from "@crawler/workers/collect.worker"
 import type { RawPlace } from "@crawler/sources/types"
 
-let server: MongoMemoryServer
+let database: Awaited<ReturnType<typeof startTestDatabase>>
 
 function place(
   overrides: Partial<RawPlace> & { externalId: string }
@@ -29,17 +29,11 @@ const filters = (input: Record<string, unknown> = {}) =>
   businessFiltersSchema.parse(input)
 
 beforeAll(async () => {
-  server = await MongoMemoryServer.create()
-
-  // Point the app's own connection helper at the in-memory server, so the
-  // repositories and the test share a single connection.
-  process.env.MONGODB_URI = server.getUri("lead-finder-test")
-  await connectToDatabase()
+  database = await startTestDatabase("persistence")
 }, 120_000)
 
 afterAll(async () => {
-  await disconnectFromDatabase()
-  await server.stop()
+  await database.stop()
 })
 
 afterEach(async () => {

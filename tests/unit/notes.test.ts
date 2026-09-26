@@ -1,7 +1,7 @@
-import { MongoMemoryServer } from "mongodb-memory-server"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
 
-import { connectToDatabase, disconnectFromDatabase } from "@/lib/mongoose"
+import { startTestDatabase } from "../helpers/db"
+
 import { BusinessModel } from "@/models/business.model"
 import { NoteModel } from "@/models/note.model"
 import { buildBusinessQuery } from "@/repositories/business.repository"
@@ -10,30 +10,30 @@ import { pipelineRepository } from "@/repositories/pipeline.repository"
 import { businessFiltersSchema } from "@/schemas/business"
 import { noteCreateSchema } from "@/schemas/note"
 
-let server: MongoMemoryServer
+let database: Awaited<ReturnType<typeof startTestDatabase>>
 
 const parse = (input: Record<string, unknown> = {}) =>
   businessFiltersSchema.parse(input)
+
+/** Counter-based ids avoid colliding on the unique (source, externalId) index. */
+let seedCounter = 0
 
 async function seedBusiness(name = "Empresa"): Promise<string> {
   const doc = await BusinessModel.create({
     name,
     source: "manual",
-    externalId: `note-${Date.now()}-${Math.random()}`,
+    externalId: `note-${(seedCounter += 1)}`,
     collectedAt: new Date(),
   })
   return String(doc._id)
 }
 
 beforeAll(async () => {
-  server = await MongoMemoryServer.create()
-  process.env.MONGODB_URI = server.getUri("notes-test")
-  await connectToDatabase()
+  database = await startTestDatabase("notes")
 }, 120_000)
 
 afterAll(async () => {
-  await disconnectFromDatabase()
-  await server.stop()
+  await database.stop()
 })
 
 afterEach(async () => {
