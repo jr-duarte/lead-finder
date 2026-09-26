@@ -236,9 +236,13 @@ export function buildApproachPrompt(
  * so a dev hot reload of this module does not forget runs still in progress.
  */
 const globalForApproach = globalThis as typeof globalThis & {
-  approachInFlight?: Set<string>
+  __leadFinderApproachInFlight?: Set<string>
 }
-const inFlight = (globalForApproach.approachInFlight ??= new Set<string>())
+
+const inFlight: Set<string> =
+  globalForApproach.__leadFinderApproachInFlight ?? new Set<string>()
+
+globalForApproach.__leadFinderApproachInFlight = inFlight
 
 export const approachService = {
   /**
