@@ -220,6 +220,23 @@ function toBusiness(raw: RawBusiness): Business {
       error: raw.enrichment?.error ?? undefined,
     },
     registry: raw.registry ? toRegistry(raw.registry) : undefined,
+    approach: raw.approach?.generatedAt
+      ? {
+          generatedAt: raw.approach.generatedAt,
+          model: raw.approach.model ?? undefined,
+          diagnosis: raw.approach.diagnosis ?? "",
+          hook: raw.approach.hook ?? "",
+          whatsapp: raw.approach.whatsapp ?? "",
+          emailSubject: raw.approach.emailSubject ?? "",
+          emailBody: raw.approach.emailBody ?? "",
+          callScript: raw.approach.callScript ?? "",
+          followUp: raw.approach.followUp ?? "",
+          objections: (raw.approach.objections ?? []).map((item) => ({
+            objection: item.objection ?? "",
+            answer: item.answer ?? "",
+          })),
+        }
+      : undefined,
     status: raw.status,
     searchIds: (raw.searchIds ?? []).map(String),
     pipeline: raw.pipeline

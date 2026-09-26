@@ -20,6 +20,10 @@ const envSchema = z.object({
   CRAWLER_MAX_CONTACT_PAGES: z.coerce.number().int().min(0).max(5).default(2),
   /** Minha Receita base URL for CNPJ lookups; empty disables them. */
   CNPJ_LOOKUP_ENDPOINT: z.string().default("https://minhareceita.org"),
+  /** Claude Code executable used to generate sales approaches. */
+  CLAUDE_CLI_PATH: z.string().default("claude"),
+  CLAUDE_CLI_MODEL: z.string().default("opus"),
+  CLAUDE_CLI_TIMEOUT_MS: z.coerce.number().int().min(10000).default(180000),
   CRAWLER_USER_AGENT: z
     .string()
     .default("LeadFinder/1.0 (+local research tool)"),

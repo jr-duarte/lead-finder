@@ -1,3 +1,4 @@
+import type { LeadApproach } from "@/domain/approach"
 import type { PipelineEntry } from "@/domain/pipeline"
 
 /**
@@ -141,6 +142,8 @@ export type Business = {
   enrichment: BusinessEnrichment
   /** Present once the CNPJ was looked up at the Receita. */
   registry?: BusinessRegistry
+  /** Latest sales approach generated with Claude. */
+  approach?: LeadApproach
   status: BusinessStatus
   searchIds: string[]
   /** Present only when the lead was added to the prospecting board. */

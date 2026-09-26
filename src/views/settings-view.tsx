@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PageHeader } from "@/components/layout/page-header"
+import { SellerProfileForm } from "@/components/settings/seller-profile-form"
 
 const THEMES = [
   { value: "light", label: "Claro", icon: Sun },
@@ -37,8 +38,20 @@ export function SettingsView() {
     <div className="mx-auto w-full max-w-3xl space-y-6">
       <PageHeader
         title="Configurações"
-        description="Preferências de interface."
+        description="Seu negócio e preferências de interface."
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Meu negócio</CardTitle>
+          <CardDescription>
+            Usado pelo Claude para escrever a abordagem de cada lead.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SellerProfileForm />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

@@ -2,6 +2,7 @@
 
 import {
   useMutation,
+  useMutationState,
   useQuery,
   useQueryClient,
   keepPreviousData,
@@ -73,6 +74,46 @@ export function useUpdateBusiness(id: string) {
       toast.error("Não foi possível salvar", { description: error.message })
     },
   })
+}
+
+export const approachKeys = {
+  generate: (id: string) => ["approach", "generate", id] as const,
+}
+
+/** Writes a sales approach with Claude; the request lasts until it is done. */
+export function useGenerateApproach(id: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    // Keyed per lead so the running state can be read after a remount.
+    mutationKey: approachKeys.generate(id),
+    mutationFn: () =>
+      apiFetch<BusinessDTO>(`/api/businesses/${id}/approach`, {
+        method: "POST",
+      }),
+    onSuccess: (business) => {
+      queryClient.setQueryData(businessKeys.detail(id), business)
+      toast.success("Abordagem gerada.")
+    },
+    onError: (error: Error) => {
+      toast.error("Não foi possível gerar a abordagem", {
+        description: error.message,
+      })
+    },
+  })
+}
+
+/**
+ * Whether an approach is being generated for the lead. Read from the mutation
+ * cache rather than from useGenerateApproach, so leaving the page and coming
+ * back still shows the run in progress.
+ */
+export function useIsGeneratingApproach(id: string): boolean {
+  return (
+    useMutationState({
+      filters: { mutationKey: approachKeys.generate(id), status: "pending" },
+    }).length > 0
+  )
 }
 
 export function useDeleteBusinesses() {

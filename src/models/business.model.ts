@@ -96,6 +96,25 @@ const registrySchema = new Schema(
   { _id: false }
 )
 
+const approachSchema = new Schema(
+  {
+    generatedAt: { type: Date, required: true },
+    model: String,
+    diagnosis: String,
+    hook: String,
+    whatsapp: String,
+    emailSubject: String,
+    emailBody: String,
+    callScript: String,
+    followUp: String,
+    objections: {
+      type: [new Schema({ objection: String, answer: String }, { _id: false })],
+      default: [],
+    },
+  },
+  { _id: false }
+)
+
 const pipelineSchema = new Schema(
   {
     stage: { type: String, enum: PIPELINE_STAGES, required: true },
@@ -125,6 +144,7 @@ const businessSchema = new Schema(
     location: { type: locationSchema, default: () => ({}) },
     enrichment: { type: enrichmentSchema, default: () => ({}) },
     registry: { type: registrySchema, default: undefined },
+    approach: { type: approachSchema, default: undefined },
     status: {
       type: String,
       enum: BUSINESS_STATUS,

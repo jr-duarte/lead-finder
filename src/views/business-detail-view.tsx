@@ -30,6 +30,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { LeadApproachPanel } from "@/components/approach/lead-approach-panel"
 import { BusinessEditDialog } from "@/components/businesses/business-edit-dialog"
 import { BusinessStatusBadge } from "@/components/businesses/business-status-badge"
 import { ErrorState } from "@/components/common/error-state"
@@ -215,6 +216,7 @@ export function BusinessDetailView({ id }: { id: string }) {
       <Tabs defaultValue="info">
         <TabsList>
           <TabsTrigger value="info">Informações</TabsTrigger>
+          <TabsTrigger value="approach">Abordagem</TabsTrigger>
           <TabsTrigger value="contact">Contato</TabsTrigger>
           <TabsTrigger value="registry">Receita</TabsTrigger>
           <TabsTrigger value="location">Localização</TabsTrigger>
@@ -292,6 +294,10 @@ export function BusinessDetailView({ id }: { id: string }) {
               </dl>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="approach" className="pt-4">
+          <LeadApproachPanel business={business} />
         </TabsContent>
 
         <TabsContent value="contact" className="pt-4">
