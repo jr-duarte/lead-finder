@@ -18,6 +18,8 @@ const envSchema = z.object({
   CRAWLER_TIMEOUT_MS: z.coerce.number().int().min(1000).default(15000),
   /** Contact pages visited per site when the home page yields no e-mail. */
   CRAWLER_MAX_CONTACT_PAGES: z.coerce.number().int().min(0).max(5).default(2),
+  /** Minha Receita base URL for CNPJ lookups; empty disables them. */
+  CNPJ_LOOKUP_ENDPOINT: z.string().default("https://minhareceita.org"),
   CRAWLER_USER_AGENT: z
     .string()
     .default("LeadFinder/1.0 (+local research tool)"),

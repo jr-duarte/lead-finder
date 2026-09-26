@@ -1,3 +1,5 @@
+import type { BusinessRegistry } from "@/domain/business"
+import { lookupCnpj } from "@crawler/lookups/cnpj.lookup"
 import {
   extractFromHtml,
   findContactLinks,
@@ -11,6 +13,8 @@ export type EnrichmentTarget = {
   id: string
   name: string
   website?: string
+  /** A CNPJ already on record (e.g. typed by the user) wins over the site's. */
+  cnpj?: string
 }
 
 export type EnrichmentOutcome = {
@@ -27,6 +31,12 @@ export type EnrichmentOutcome = {
   websiteStatus?: number
   websiteTitle?: string
   technologies: string[]
+  /** CNPJ on record or found on the site; absent when neither had one. */
+  cnpj?: string
+  /** Receita record for `cnpj`, when the lookup succeeded. */
+  registry?: BusinessRegistry
+  /** Why the Receita lookup failed; the enrichment itself still counts. */
+  registryError?: string
   error?: string
   /** Set when the run was cancelled before this target was attempted. */
   cancelled?: boolean
@@ -64,6 +74,11 @@ export type EnrichConfig = {
    * a cancellation requested from the UI.
    */
   shouldStop?: () => Promise<boolean> | boolean
+  /**
+   * Minha Receita base URL used to look up the CNPJ found on the site.
+   * Absent or empty disables the lookup.
+   */
+  cnpjLookupEndpoint?: string
   /** Injectable for tests; defaults to global fetch. */
   fetchImpl?: typeof fetch
 }
@@ -250,9 +265,23 @@ export async function enrichOne(
 
     const extraction = mergeExtractions(extractions)
 
+    const cnpj = target.cnpj ?? extraction.cnpj
+    const lookup =
+      cnpj && config.cnpjLookupEndpoint
+        ? await lookupCnpj(cnpj, {
+            endpoint: config.cnpjLookupEndpoint,
+            timeoutMs: config.timeoutMs,
+            userAgent: config.userAgent,
+            fetchImpl: config.fetchImpl,
+          })
+        : undefined
+
     return {
       ...base,
       ok: true,
+      cnpj,
+      registry: lookup?.ok ? lookup.registry : undefined,
+      registryError: lookup && !lookup.ok ? lookup.error : undefined,
       websiteStatus: response.status,
       websiteTitle: extraction.title,
       emails: extraction.emails,

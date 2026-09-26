@@ -54,6 +54,48 @@ const enrichmentSchema = new Schema(
   { _id: false }
 )
 
+const registryActivitySchema = new Schema(
+  {
+    code: String,
+    description: String,
+  },
+  { _id: false }
+)
+
+const registryPartnerSchema = new Schema(
+  {
+    name: String,
+    role: String,
+    since: String,
+  },
+  { _id: false }
+)
+
+/** Receita Federal record looked up by CNPJ. */
+const registrySchema = new Schema(
+  {
+    cnpj: String,
+    fetchedAt: Date,
+    legalName: String,
+    tradeName: String,
+    status: String,
+    statusDate: String,
+    openedAt: String,
+    size: String,
+    legalNature: String,
+    mainActivity: { type: registryActivitySchema, default: undefined },
+    secondaryActivities: { type: [registryActivitySchema], default: [] },
+    shareCapital: Number,
+    simples: Boolean,
+    mei: Boolean,
+    email: String,
+    phones: { type: [String], default: [] },
+    partners: { type: [registryPartnerSchema], default: [] },
+    error: String,
+  },
+  { _id: false }
+)
+
 const pipelineSchema = new Schema(
   {
     stage: { type: String, enum: PIPELINE_STAGES, required: true },
@@ -70,6 +112,7 @@ const businessSchema = new Schema(
     externalId: { type: String, required: true },
     source: { type: String, required: true, default: "mock" },
     name: { type: String, required: true, trim: true },
+    cnpj: { type: String, trim: true, index: true },
     category: { type: String, trim: true },
     phone: { type: String, trim: true },
     website: { type: String, trim: true },
@@ -81,6 +124,7 @@ const businessSchema = new Schema(
     address: { type: addressSchema, default: () => ({}) },
     location: { type: locationSchema, default: () => ({}) },
     enrichment: { type: enrichmentSchema, default: () => ({}) },
+    registry: { type: registrySchema, default: undefined },
     status: {
       type: String,
       enum: BUSINESS_STATUS,

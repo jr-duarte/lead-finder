@@ -3,12 +3,15 @@ import {
   OPERATIONAL_STATUS_LABELS,
   type Business,
 } from "@/domain/business"
+import { formatCnpj, normalizeCnpj } from "@/domain/cnpj"
+import { getEnv } from "@/lib/env"
 import {
   businessRepository,
   type Paginated,
 } from "@/repositories/business.repository"
 import { noteRepository } from "@/repositories/note.repository"
 import { pipelineRepository } from "@/repositories/pipeline.repository"
+import { lookupCnpj } from "@crawler/lookups/cnpj.lookup"
 import type {
   BusinessCreateInput,
   BusinessFilters,
@@ -27,6 +30,31 @@ function operationalLabel(business: Business): string {
   return OPERATIONAL_STATUS_LABELS[business.operationalStatus]
 }
 
+/**
+ * Looks a CNPJ up at the Receita and returns the fields to store. A failure
+ * keeps the earlier record only when it belongs to the same CNPJ; a record
+ * for a different company would be misleading.
+ */
+async function registryPatch(
+  cnpj: string,
+  current?: Business | null
+): Promise<Record<string, unknown>> {
+  const env = getEnv()
+  if (!env.CNPJ_LOOKUP_ENDPOINT) return {}
+
+  const result = await lookupCnpj(cnpj, {
+    endpoint: env.CNPJ_LOOKUP_ENDPOINT,
+    timeoutMs: env.CRAWLER_TIMEOUT_MS,
+    userAgent: env.CRAWLER_USER_AGENT,
+  })
+
+  if (result.ok) return { registry: result.registry }
+  if (current?.registry?.cnpj === cnpj) {
+    return { "registry.error": result.error }
+  }
+  return { registry: { cnpj, error: result.error } }
+}
+
 export const businessService = {
   list(filters: BusinessFilters): Promise<Paginated<Business>> {
     return businessRepository.list(filters)
@@ -34,16 +62,26 @@ export const businessService = {
 
   /** Creates a lead typed in by the user, optionally putting it on the board. */
   async create(input: BusinessCreateInput): Promise<Business> {
-    const { instagram, email, addToPipeline, ...rest } = input
+    const { instagram, email, addToPipeline, cnpj, ...rest } = input
+    const normalizedCnpj = cnpj ? normalizeCnpj(cnpj) : undefined
 
-    const business = await businessRepository.create({
+    let business = await businessRepository.create({
       ...rest,
+      cnpj: normalizedCnpj,
       enrichment: {
         emails: email ? [email] : [],
         socials: instagram ? { instagram } : {},
         technologies: [],
       },
     })
+
+    if (normalizedCnpj) {
+      business =
+        (await businessRepository.update(
+          business.id,
+          await registryPatch(normalizedCnpj)
+        )) ?? business
+    }
 
     if (addToPipeline) {
       await pipelineRepository.add([business.id], "NEW")
@@ -65,9 +103,26 @@ export const businessService = {
     id: string,
     input: BusinessUpdateInput
   ): Promise<Business | null> {
-    const { instagram, address, ...rest } = input
+    const { instagram, address, cnpj, ...rest } = input
 
     const patch: Record<string, unknown> = { ...rest }
+
+    if (cnpj !== undefined) {
+      const normalized = cnpj ? normalizeCnpj(cnpj) : undefined
+      patch.cnpj = normalized
+
+      if (!normalized) {
+        // The record describes the CNPJ that was just removed.
+        patch.registry = undefined
+      } else {
+        const current = await businessRepository.findById(id)
+        // Looked up only when it changed or was never fetched, so saving
+        // other fields does not hit the Receita every time.
+        if (current?.cnpj !== normalized || !current.registry?.fetchedAt) {
+          Object.assign(patch, await registryPatch(normalized, current))
+        }
+      }
+    }
 
     if (address) {
       for (const [key, value] of Object.entries(address)) {
@@ -116,6 +171,39 @@ export const businessService = {
      */
     const columns: { header: string; value: (b: Business) => unknown }[] = [
       { header: "Nome", value: (b) => b.name },
+      { header: "CNPJ", value: (b) => formatCnpj(b.cnpj) },
+      { header: "Razao social", value: (b) => b.registry?.legalName },
+      { header: "Nome fantasia", value: (b) => b.registry?.tradeName },
+      {
+        header: "Situacao cadastral",
+        value: (b) => b.registry?.status,
+      },
+      { header: "Porte", value: (b) => b.registry?.size },
+      {
+        header: "CNAE principal",
+        value: (b) =>
+          b.registry?.mainActivity
+            ? [
+                b.registry.mainActivity.code,
+                b.registry.mainActivity.description,
+              ]
+                .filter(Boolean)
+                .join(" - ")
+            : undefined,
+      },
+      { header: "Data de abertura", value: (b) => b.registry?.openedAt },
+      { header: "Email (Receita)", value: (b) => b.registry?.email },
+      {
+        header: "Telefones (Receita)",
+        value: (b) => b.registry?.phones.join("; "),
+      },
+      {
+        header: "Socios",
+        value: (b) =>
+          b.registry?.partners
+            .map((p) => (p.role ? `${p.name} (${p.role})` : p.name))
+            .join("; "),
+      },
       { header: "Categoria", value: (b) => b.category },
       { header: "Tipo (Google)", value: (b) => b.primaryType },
       { header: "Situacao", value: (b) => operationalLabel(b) },

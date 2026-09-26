@@ -37,13 +37,16 @@ import { BusinessNotes } from "@/components/notes/business-notes"
 import { PipelineStageBadge } from "@/components/pipeline/pipeline-stage-badge"
 import { PipelineStageSelect } from "@/components/pipeline/pipeline-stage-select"
 import {
+  formatCurrency,
   formatDateTime,
+  formatIsoDay,
   formatNumber,
   formatPhone,
   formatRating,
   formatWebsiteLabel,
 } from "@/lib/format"
 import { OPERATIONAL_STATUS_LABELS } from "@/domain/business"
+import { formatCnpj } from "@/domain/cnpj"
 import type { BusinessDTO } from "@/types/api"
 import { useBusiness, useEnrichBusinesses } from "@/viewmodels/use-businesses"
 import { useAddToPipeline, useChangeStage } from "@/viewmodels/use-pipeline"
@@ -104,6 +107,7 @@ export function BusinessDetailView({ id }: { id: string }) {
   const business: BusinessDTO = data
   const socials = business.enrichment?.socials ?? {}
   const address = business.address ?? {}
+  const registry = business.registry
 
   return (
     <div className="space-y-6">
@@ -127,6 +131,14 @@ export function BusinessDetailView({ id }: { id: string }) {
                   className="border-destructive/40 text-destructive bg-destructive/10"
                 >
                   {OPERATIONAL_STATUS_LABELS[business.operationalStatus]}
+                </Badge>
+              ) : null}
+              {registry?.status && registry.status !== "ATIVA" ? (
+                <Badge
+                  variant="outline"
+                  className="border-destructive/40 text-destructive bg-destructive/10"
+                >
+                  CNPJ {registry.status.toLowerCase()}
                 </Badge>
               ) : null}
             </div>
@@ -204,6 +216,7 @@ export function BusinessDetailView({ id }: { id: string }) {
         <TabsList>
           <TabsTrigger value="info">Informações</TabsTrigger>
           <TabsTrigger value="contact">Contato</TabsTrigger>
+          <TabsTrigger value="registry">Receita</TabsTrigger>
           <TabsTrigger value="location">Localização</TabsTrigger>
           <TabsTrigger value="enrichment">Enriquecimento</TabsTrigger>
           <TabsTrigger value="notes">Anotações</TabsTrigger>
@@ -218,6 +231,13 @@ export function BusinessDetailView({ id }: { id: string }) {
             <CardContent>
               <dl className="divide-y">
                 <Field label="Nome">{business.name}</Field>
+                <Field label="CNPJ">
+                  {business.cnpj ? (
+                    <span className="tabular">{formatCnpj(business.cnpj)}</span>
+                  ) : (
+                    <Fallback />
+                  )}
+                </Field>
                 <Field label="Categoria">
                   {business.category ?? <Fallback />}
                 </Field>
@@ -394,6 +414,182 @@ export function BusinessDetailView({ id }: { id: string }) {
                   )}
                 </Field>
               </dl>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="registry" className="pt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                Dados cadastrais (Receita Federal)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!business.cnpj ? (
+                <p className="text-muted-foreground py-4 text-sm">
+                  Nenhum CNPJ encontrado. Enriqueça a empresa para procurá-lo no
+                  site ou informe-o em Editar.
+                </p>
+              ) : !registry?.fetchedAt ? (
+                <p
+                  className={
+                    registry?.error
+                      ? "text-destructive py-4 text-sm"
+                      : "text-muted-foreground py-4 text-sm"
+                  }
+                >
+                  {registry?.error ??
+                    "O CNPJ ainda não foi consultado. Enriqueça a empresa ou salve-a em Editar para consultar."}
+                </p>
+              ) : (
+                <dl className="divide-y">
+                  <Field label="CNPJ">
+                    <span className="tabular">
+                      {formatCnpj(registry.cnpj ?? business.cnpj)}
+                    </span>
+                  </Field>
+                  <Field label="Razão social">
+                    {registry.legalName ?? <Fallback />}
+                  </Field>
+                  <Field label="Nome fantasia">
+                    {registry.tradeName ?? <Fallback />}
+                  </Field>
+                  <Field label="Situação cadastral">
+                    {registry.status ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={
+                            registry.status === "ATIVA"
+                              ? undefined
+                              : "border-destructive/40 text-destructive bg-destructive/10"
+                          }
+                        >
+                          {registry.status}
+                        </Badge>
+                        {registry.statusDate ? (
+                          <span className="text-muted-foreground tabular text-xs">
+                            desde {formatIsoDay(registry.statusDate)}
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      <Fallback />
+                    )}
+                  </Field>
+                  <Field label="Abertura">
+                    <span className="tabular">
+                      {formatIsoDay(registry.openedAt)}
+                    </span>
+                  </Field>
+                  <Field label="Porte">
+                    {[
+                      registry.size,
+                      registry.mei ? "MEI" : null,
+                      registry.simples ? "Simples Nacional" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" • ") || <Fallback />}
+                  </Field>
+                  <Field label="Natureza jurídica">
+                    {registry.legalNature ?? <Fallback />}
+                  </Field>
+                  <Field label="Capital social">
+                    <span className="tabular">
+                      {formatCurrency(registry.shareCapital)}
+                    </span>
+                  </Field>
+                  <Field label="Atividade principal">
+                    {registry.mainActivity ? (
+                      <span>
+                        <code className="bg-muted mr-1.5 rounded px-1.5 py-0.5 text-xs">
+                          {registry.mainActivity.code}
+                        </code>
+                        {registry.mainActivity.description}
+                      </span>
+                    ) : (
+                      <Fallback />
+                    )}
+                  </Field>
+                  <Field label="Atividades secundárias">
+                    {registry.secondaryActivities.length ? (
+                      <ul className="space-y-1">
+                        {registry.secondaryActivities.map((item) => (
+                          <li key={item.code}>
+                            <code className="bg-muted mr-1.5 rounded px-1.5 py-0.5 text-xs">
+                              {item.code}
+                            </code>
+                            {item.description}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <Fallback />
+                    )}
+                  </Field>
+                  <Field label="Sócios">
+                    {registry.partners.length ? (
+                      <ul className="space-y-1">
+                        {registry.partners.map((partner) => (
+                          <li key={`${partner.name}-${partner.role ?? ""}`}>
+                            {partner.name}
+                            {partner.role ? (
+                              <span className="text-muted-foreground">
+                                {" "}
+                                — {partner.role}
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <Fallback />
+                    )}
+                  </Field>
+                  <Field label="E-mail (Receita)">
+                    {registry.email ? (
+                      <a
+                        href={`mailto:${registry.email}`}
+                        className="inline-flex items-center gap-1.5 hover:underline"
+                      >
+                        <Mail className="size-3.5" />
+                        {registry.email}
+                      </a>
+                    ) : (
+                      <Fallback />
+                    )}
+                  </Field>
+                  <Field label="Telefones (Receita)">
+                    {registry.phones.length ? (
+                      <div className="flex flex-col gap-1">
+                        {registry.phones.map((phone) => (
+                          <a
+                            key={phone}
+                            href={`tel:${phone}`}
+                            className="tabular inline-flex items-center gap-1.5 hover:underline"
+                          >
+                            <Phone className="size-3.5" />
+                            {formatPhone(phone)}
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <Fallback />
+                    )}
+                  </Field>
+                  <Field label="Consultado em">
+                    <span className="tabular">
+                      {formatDateTime(registry.fetchedAt)}
+                    </span>
+                  </Field>
+                  {registry.error ? (
+                    <Field label="Última consulta">
+                      <span className="text-destructive">{registry.error}</span>
+                    </Field>
+                  ) : null}
+                </dl>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

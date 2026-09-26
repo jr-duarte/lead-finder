@@ -4,7 +4,7 @@ import type {
 } from "mongoose"
 import { Types } from "mongoose"
 
-import type { Business } from "@/domain/business"
+import type { Business, BusinessRegistry } from "@/domain/business"
 import type { PipelineStage } from "@/domain/pipeline"
 import { connectToDatabase } from "@/lib/mongoose"
 import { BusinessModel, type BusinessDocument } from "@/models/business.model"
@@ -131,12 +131,57 @@ export function buildBusinessQuery(
   return and.length > 0 ? { $and: and } : {}
 }
 
+function toRegistry(
+  raw: NonNullable<RawBusiness["registry"]>
+): BusinessRegistry {
+  return {
+    cnpj: raw.cnpj ?? undefined,
+    fetchedAt: raw.fetchedAt ?? undefined,
+    legalName: raw.legalName ?? undefined,
+    tradeName: raw.tradeName ?? undefined,
+    status: raw.status ?? undefined,
+    statusDate: raw.statusDate ?? undefined,
+    openedAt: raw.openedAt ?? undefined,
+    size: raw.size ?? undefined,
+    legalNature: raw.legalNature ?? undefined,
+    mainActivity: raw.mainActivity?.code
+      ? {
+          code: raw.mainActivity.code,
+          description: raw.mainActivity.description ?? undefined,
+        }
+      : undefined,
+    secondaryActivities: (raw.secondaryActivities ?? []).flatMap((item) =>
+      item.code
+        ? [{ code: item.code, description: item.description ?? undefined }]
+        : []
+    ),
+    shareCapital: raw.shareCapital ?? undefined,
+    simples: raw.simples ?? undefined,
+    mei: raw.mei ?? undefined,
+    email: raw.email ?? undefined,
+    phones: raw.phones ?? [],
+    partners: (raw.partners ?? []).flatMap((partner) =>
+      partner.name
+        ? [
+            {
+              name: partner.name,
+              role: partner.role ?? undefined,
+              since: partner.since ?? undefined,
+            },
+          ]
+        : []
+    ),
+    error: raw.error ?? undefined,
+  }
+}
+
 function toBusiness(raw: RawBusiness): Business {
   return {
     id: String(raw._id),
     externalId: raw.externalId,
     source: raw.source,
     name: raw.name,
+    cnpj: raw.cnpj ?? undefined,
     category: raw.category ?? undefined,
     phone: raw.phone ?? undefined,
     website: raw.website ?? undefined,
@@ -174,6 +219,7 @@ function toBusiness(raw: RawBusiness): Business {
       technologies: raw.enrichment?.technologies ?? [],
       error: raw.enrichment?.error ?? undefined,
     },
+    registry: raw.registry ? toRegistry(raw.registry) : undefined,
     status: raw.status,
     searchIds: (raw.searchIds ?? []).map(String),
     pipeline: raw.pipeline

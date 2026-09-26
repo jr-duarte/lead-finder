@@ -1,3 +1,4 @@
+import { extractCnpjs } from "@crawler/parsers/cnpj.parser"
 import { normalizeInstagram } from "@crawler/parsers/place.parser"
 
 export type WebsiteExtraction = {
@@ -7,6 +8,8 @@ export type WebsiteExtraction = {
   facebook?: string
   whatsapp?: string
   linkedin?: string
+  /** First valid CNPJ printed on the page, digits only. */
+  cnpj?: string
   technologies: string[]
 }
 
@@ -164,6 +167,8 @@ export function extractFromHtml(html: string): WebsiteExtraction {
     signal.pattern.test(html)
   ).map((signal) => signal.label)
 
+  const [cnpj] = extractCnpjs(html)
+
   return {
     title: title ? decodeEntities(title).trim().slice(0, 200) : undefined,
     emails,
@@ -171,6 +176,7 @@ export function extractFromHtml(html: string): WebsiteExtraction {
     facebook,
     whatsapp: whatsappRaw,
     linkedin,
+    cnpj,
     technologies,
   }
 }
@@ -281,6 +287,7 @@ export function mergeExtractions(
     facebook: first.facebook,
     whatsapp: first.whatsapp,
     linkedin: first.linkedin,
+    cnpj: first.cnpj,
     technologies: [...first.technologies],
   }
 
@@ -293,6 +300,7 @@ export function mergeExtractions(
     merged.facebook ??= extraction.facebook
     merged.whatsapp ??= extraction.whatsapp
     merged.linkedin ??= extraction.linkedin
+    merged.cnpj ??= extraction.cnpj
 
     merged.technologies = Array.from(
       new Set([...merged.technologies, ...extraction.technologies])

@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { BUSINESS_STATUS, BUSINESS_STATUS_LABELS } from "@/domain/business"
+import { formatCnpj } from "@/domain/cnpj"
 import {
   businessUpdateSchema,
   type BusinessUpdateFormInput,
@@ -55,6 +56,7 @@ export function BusinessEditDialog({
     resolver: zodResolver(businessUpdateSchema),
     defaultValues: {
       name: "",
+      cnpj: "",
       category: "",
       phone: "",
       website: "",
@@ -70,6 +72,7 @@ export function BusinessEditDialog({
 
     form.reset({
       name: business.name,
+      cnpj: formatCnpj(business.cnpj),
       category: business.category ?? "",
       phone: business.phone ?? "",
       website: business.website ?? "",
@@ -114,6 +117,27 @@ export function BusinessEditDialog({
                   <FormControl>
                     <Input {...field} placeholder="Nome da empresa" />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="cnpj"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>CNPJ</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      value={field.value ?? ""}
+                      placeholder="12.345.678/0001-90"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Ao salvar, os dados cadastrais são consultados na Receita.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

@@ -11,6 +11,7 @@ import { businessFiltersSchema } from "@/schemas/business"
 import {
   enrichMany,
   type EnrichmentOutcome,
+  type EnrichmentTarget,
 } from "@crawler/workers/enrich.worker"
 
 /** A job whose heartbeat is older than this was killed by a restart. */
@@ -37,11 +38,7 @@ export const enrichmentService = {
     const env = getEnv()
     const businesses = await businessRepository.findManyByIds(ids)
 
-    const targets = businesses.map((business: Business) => ({
-      id: business.id,
-      name: business.name,
-      website: business.website,
-    }))
+    const targets = businesses.map(toTarget)
 
     const outcomes = await enrichMany(targets, {
       concurrency: env.CRAWLER_CONCURRENCY,
@@ -49,6 +46,7 @@ export const enrichmentService = {
       timeoutMs: env.CRAWLER_TIMEOUT_MS,
       userAgent: env.CRAWLER_USER_AGENT,
       maxContactPages: env.CRAWLER_MAX_CONTACT_PAGES,
+      cnpjLookupEndpoint: env.CNPJ_LOOKUP_ENDPOINT,
       renderJavaScript: options.renderJavaScript ?? false,
     })
 
@@ -114,6 +112,15 @@ function pendingFilters({ pageSize }: { pageSize: number }) {
   })
 }
 
+function toTarget(business: Business): EnrichmentTarget {
+  return {
+    id: business.id,
+    name: business.name,
+    website: business.website,
+    cnpj: business.cnpj,
+  }
+}
+
 async function persistOutcome(outcome: EnrichmentOutcome): Promise<void> {
   await businessRepository.update(outcome.id, {
     "enrichment.enrichedAt": outcome.enrichedAt,
@@ -127,6 +134,13 @@ async function persistOutcome(outcome: EnrichmentOutcome): Promise<void> {
     "enrichment.technologies": outcome.technologies,
     "enrichment.error": outcome.error,
     status: outcome.ok ? "ENRICHED" : "ENRICHMENT_FAILED",
+    // Written only when present: a run that finds nothing must not erase a
+    // CNPJ typed by the user or a record from an earlier lookup.
+    ...(outcome.cnpj ? { cnpj: outcome.cnpj } : {}),
+    ...(outcome.registry ? { registry: outcome.registry } : {}),
+    ...(outcome.registryError
+      ? { "registry.error": outcome.registryError }
+      : {}),
   })
 }
 
@@ -149,11 +163,7 @@ async function processJob(jobId: string): Promise<void> {
   try {
     const businesses = await businessRepository.findManyByIds(job.pendingIds)
 
-    const targets = businesses.map((business: Business) => ({
-      id: business.id,
-      name: business.name,
-      website: business.website,
-    }))
+    const targets = businesses.map(toTarget)
 
     await enrichMany(targets, {
       concurrency: env.CRAWLER_CONCURRENCY,
@@ -161,6 +171,7 @@ async function processJob(jobId: string): Promise<void> {
       timeoutMs: env.CRAWLER_TIMEOUT_MS,
       userAgent: env.CRAWLER_USER_AGENT,
       maxContactPages: env.CRAWLER_MAX_CONTACT_PAGES,
+      cnpjLookupEndpoint: env.CNPJ_LOOKUP_ENDPOINT,
       renderJavaScript: job.renderJavaScript,
 
       // Cancellation is requested by writing to the job, so it is read back

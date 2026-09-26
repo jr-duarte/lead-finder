@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { BUSINESS_STATUS } from "@/domain/business"
+import { isValidCnpj } from "@/domain/cnpj"
 import { PIPELINE_STAGES } from "@/domain/pipeline"
 
 /** Tri-state filter: any / with / without. */
@@ -49,9 +50,17 @@ export const businessFiltersSchema = z.object({
 export type BusinessFilters = z.infer<typeof businessFiltersSchema>
 export type BusinessFiltersInput = z.input<typeof businessFiltersSchema>
 
+/** Masked or bare; empty clears it. */
+const cnpjField = z
+  .string()
+  .trim()
+  .optional()
+  .refine((value) => !value || isValidCnpj(value), "Informe um CNPJ válido")
+
 /** Editable subset of a business, used by the edit form and PATCH route. */
 export const businessUpdateSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome da empresa"),
+  cnpj: cnpjField,
   category: z.string().trim().optional(),
   phone: z.string().trim().optional(),
   website: z
@@ -93,6 +102,7 @@ export const businessIdsSchema = z.object({
  */
 export const businessCreateSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome da empresa"),
+  cnpj: cnpjField,
   category: z.string().trim().optional(),
   phone: z.string().trim().optional(),
   website: z

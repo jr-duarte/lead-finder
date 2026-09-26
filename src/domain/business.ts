@@ -75,11 +75,56 @@ export type BusinessEnrichment = {
   error?: string
 }
 
+export type BusinessRegistryActivity = {
+  code: string
+  description?: string
+}
+
+export type BusinessRegistryPartner = {
+  name: string
+  /** Qualification in the partnership, e.g. "Sócio-Administrador". */
+  role?: string
+  /** ISO day (yyyy-mm-dd) the partner joined. */
+  since?: string
+}
+
+/**
+ * Company record from the Receita Federal, looked up by CNPJ. Dates are kept
+ * as ISO days (yyyy-mm-dd): they carry no time, and parsing them as Date
+ * would shift them a day back in Brazilian time zones.
+ */
+export type BusinessRegistry = {
+  /** The CNPJ this record belongs to. */
+  cnpj?: string
+  fetchedAt?: Date
+  legalName?: string
+  tradeName?: string
+  /** Registration status as the Receita names it: ATIVA, BAIXADA, INAPTA... */
+  status?: string
+  statusDate?: string
+  openedAt?: string
+  /** Company size (porte), e.g. "MICRO EMPRESA". */
+  size?: string
+  legalNature?: string
+  mainActivity?: BusinessRegistryActivity
+  secondaryActivities: BusinessRegistryActivity[]
+  shareCapital?: number
+  simples?: boolean
+  mei?: boolean
+  email?: string
+  phones: string[]
+  partners: BusinessRegistryPartner[]
+  /** Why the last lookup failed; data from an earlier lookup is kept. */
+  error?: string
+}
+
 export type Business = {
   id: string
   externalId: string
   source: string
   name: string
+  /** Digits only (or uppercase alphanumerics, for the newer format). */
+  cnpj?: string
   category?: string
   phone?: string
   website?: string
@@ -94,6 +139,8 @@ export type Business = {
   address: BusinessAddress
   location: BusinessLocation
   enrichment: BusinessEnrichment
+  /** Present once the CNPJ was looked up at the Receita. */
+  registry?: BusinessRegistry
   status: BusinessStatus
   searchIds: string[]
   /** Present only when the lead was added to the prospecting board. */

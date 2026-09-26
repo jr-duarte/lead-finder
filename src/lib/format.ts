@@ -57,3 +57,22 @@ export function formatPhone(value?: string | null): string {
 
   return value
 }
+
+/**
+ * Formats an ISO day (yyyy-mm-dd) without going through Date, which would
+ * read it as UTC midnight and show the previous day in Brazil.
+ */
+export function formatIsoDay(value?: string | null): string {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : "—"
+}
+
+const currencyFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+})
+
+export function formatCurrency(value?: number | null): string {
+  if (value === undefined || value === null) return "—"
+  return currencyFormatter.format(value)
+}

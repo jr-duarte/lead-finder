@@ -34,6 +34,7 @@ import { useCreateBusiness } from "@/viewmodels/use-pipeline"
 
 const EMPTY: BusinessCreateFormInput = {
   name: "",
+  cnpj: "",
   category: "",
   phone: "",
   website: "",
@@ -90,6 +91,27 @@ export function BusinessCreateDialog({
                   <FormControl>
                     <Input {...field} placeholder="Restaurante Silva" />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="cnpj"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>CNPJ</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      value={field.value ?? ""}
+                      placeholder="12.345.678/0001-90"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Ao salvar, os dados cadastrais são consultados na Receita.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
