@@ -80,7 +80,7 @@ dedicado para isolá-las.
 - Tabela com filtros combináveis: categoria, cidade, estado, rating, avaliações,
   presença de site/telefone/Instagram, data da coleta, etapa do funil
 - Filtros vivem na URL, então uma visão filtrada é compartilhável
-- Funil kanban com 7 etapas e drag and drop
+- Funil kanban com 7 etapas, drag and drop com suporte a mouse, toque e teclado
 - Anotações por lead, que registram a etapa do funil no momento da escrita
 - Cadastro manual de empresas
 - Exportação CSV com 30 colunas, protegida contra injeção de fórmula
@@ -100,6 +100,7 @@ dedicado para isolá-las.
 | Validação       | Zod 4                              |
 | Formulários     | React Hook Form                    |
 | Estado servidor | TanStack Query                     |
+| Drag and drop   | dnd-kit                            |
 | Testes          | Vitest + Playwright                |
 | Qualidade       | ESLint + Prettier                  |
 
@@ -360,9 +361,6 @@ API, não do sistema. Contorna-se com buscas mais específicas.
 **Alguns sites bloqueiam o crawler.** Respostas 403 são comuns em sites com
 proteção anti-bot. O sistema registra o motivo e segue adiante.
 
-**Drag and drop não funciona em toque.** Usa a API nativa do HTML5; no desktop
-funciona bem, em tablets não.
-
 ---
 
 ## Contribuindo
@@ -393,7 +391,6 @@ Os quatro precisam passar. Se a mudança afeta a interface, rode também
 - Novos adaptadores de fonte em `crawler/sources/` (basta implementar `PlaceSource`)
 - Worker separado consumindo a coleção `enrichment_jobs`
 - Autenticação para permitir deploy compartilhado
-- Drag and drop com suporte a toque (`dnd-kit`)
 - Mais sinais de detecção de tecnologia em `website.parser.ts`
 
 ---

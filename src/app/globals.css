@@ -148,3 +148,18 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/**
+ * Honour the system setting: people who disable animations still get the
+ * drag-and-drop behaviour, just without the motion.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
