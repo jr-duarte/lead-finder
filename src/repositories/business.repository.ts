@@ -6,6 +6,7 @@ import { Types } from "mongoose"
 
 import type { Business, BusinessRegistry } from "@/domain/business"
 import type { PipelineStage } from "@/domain/pipeline"
+import { phoneFields, WHATSAPP_PHONE_TYPES } from "@/domain/phone"
 import { connectToDatabase } from "@/lib/mongoose"
 import { BusinessModel, type BusinessDocument } from "@/models/business.model"
 import type { BusinessFilters, Presence } from "@/schemas/business"
@@ -47,6 +48,18 @@ function presenceCondition(
   return null
 }
 
+/** Start or end of a "YYYY-MM-DD" day in Brasília (no daylight saving). */
+function brazilDay(
+  value: string | undefined,
+  edge: "start" | "end"
+): Date | undefined {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
+  const date = new Date(
+    `${value}T${edge === "start" ? "00:00:00.000" : "23:59:59.999"}-03:00`
+  )
+  return Number.isNaN(date.getTime()) ? undefined : date
+}
+
 export function buildBusinessQuery(
   filters: Partial<BusinessFilters>
 ): QueryFilter<BusinessDocument> {
@@ -64,8 +77,27 @@ export function buildBusinessQuery(
     })
   }
 
-  if (filters.category) {
-    and.push({ category: filters.category })
+  if (filters.category?.length) {
+    and.push(
+      filters.category.length === 1
+        ? { category: filters.category[0] }
+        : { category: { $in: filters.category } }
+    )
+  }
+
+  // Same rule as leadCountry(): the address country, else the phone's, else
+  // Brazil.
+  if (filters.country?.length) {
+    const noAddressCountry = { "address.country": { $in: [null, ""] } }
+    and.push({
+      $or: [
+        { "address.country": { $in: filters.country } },
+        { ...noAddressCountry, phoneCountry: { $in: filters.country } },
+        ...(filters.country.includes("BR")
+          ? [{ ...noAddressCountry, phoneCountry: { $in: [null, ""] } }]
+          : []),
+      ],
+    })
   }
 
   if (filters.city) {
@@ -96,6 +128,19 @@ export function buildBusinessQuery(
   )
   if (instagram) and.push(instagram)
 
+  // WhatsApp is only confirmed when sending; here a mobile number (or one
+  // that may be mobile, as in the US) or a WhatsApp link found on the site
+  // is the best available sign, in any country.
+  if (filters.whatsapp === "yes" || filters.whatsapp === "no") {
+    const reachable = [
+      { phoneType: { $in: WHATSAPP_PHONE_TYPES } },
+      { "enrichment.socials.whatsapp": { $exists: true, $nin: [null, ""] } },
+    ]
+    and.push(
+      filters.whatsapp === "yes" ? { $or: reachable } : { $nor: reachable }
+    )
+  }
+
   if (filters.status) {
     and.push({ status: filters.status })
   }
@@ -117,15 +162,16 @@ export function buildBusinessQuery(
     })
   }
 
+  // Days picked in the UI are Brazilian calendar days, whatever the server
+  // time zone: "2026-10-01" alone would parse as UTC midnight, 21h of the
+  // day before in Brasília.
   if (filters.collectedFrom || filters.collectedTo) {
     const range: Record<string, Date> = {}
-    if (filters.collectedFrom) range.$gte = new Date(filters.collectedFrom)
-    if (filters.collectedTo) {
-      const to = new Date(filters.collectedTo)
-      to.setHours(23, 59, 59, 999)
-      range.$lte = to
-    }
-    and.push({ collectedAt: range })
+    const from = brazilDay(filters.collectedFrom, "start")
+    const to = brazilDay(filters.collectedTo, "end")
+    if (from) range.$gte = from
+    if (to) range.$lte = to
+    if (from || to) and.push({ collectedAt: range })
   }
 
   return and.length > 0 ? { $and: and } : {}
@@ -184,6 +230,8 @@ function toBusiness(raw: RawBusiness): Business {
     cnpj: raw.cnpj ?? undefined,
     category: raw.category ?? undefined,
     phone: raw.phone ?? undefined,
+    phoneType: (raw.phoneType as Business["phoneType"]) ?? undefined,
+    phoneCountry: raw.phoneCountry ?? undefined,
     website: raw.website ?? undefined,
     rating: raw.rating ?? undefined,
     reviewsCount: raw.reviewsCount ?? 0,
@@ -290,8 +338,10 @@ export const businessRepository = {
   async create(input: Record<string, unknown>): Promise<Business> {
     await connectToDatabase()
 
+    const address = input.address as { country?: string } | undefined
     const created = await BusinessModel.create({
       ...input,
+      ...phoneFields(input.phone as string | undefined, address?.country),
       source: "manual",
       externalId: `manual-${new Types.ObjectId().toString()}`,
       collectedAt: new Date(),
@@ -335,6 +385,26 @@ export const businessRepository = {
     const $set: Record<string, unknown> = {}
     const $unset: Record<string, ""> = {}
 
+    // The phone type depends on the phone and the country; either changing
+    // recomputes it.
+    const touchesPhone = Object.keys(patch).some(
+      (key) => key === "phone" || key === "address" || key === "address.country"
+    )
+    if (touchesPhone) {
+      const current = await BusinessModel.findById(id)
+        .select("phone address.country")
+        .lean<{ phone?: string; address?: { country?: string } }>()
+        .exec()
+      const phone = "phone" in patch ? (patch.phone as string) : current?.phone
+      const country =
+        "address.country" in patch
+          ? (patch["address.country"] as string)
+          : "address" in patch
+            ? (patch.address as { country?: string } | undefined)?.country
+            : current?.address?.country
+      patch = { ...patch, ...phoneFields(phone, country) }
+    }
+
     for (const [key, value] of Object.entries(patch)) {
       if (value === undefined) {
         $unset[key] = ""
@@ -354,6 +424,39 @@ export const businessRepository = {
       .exec()
 
     return raw ? toBusiness(raw) : null
+  },
+
+  /**
+   * Fills the phone type of leads saved before it existed. Cheap to run on
+   * every start: only leads with a phone and no type are read.
+   */
+  async backfillPhoneFields(): Promise<number> {
+    await connectToDatabase()
+    const raw = await BusinessModel.find({
+      phone: { $exists: true, $nin: [null, ""] },
+      phoneType: { $exists: false },
+      phoneCountry: { $exists: false },
+    })
+      .select("phone address.country")
+      .lean<
+        {
+          _id: Types.ObjectId
+          phone: string
+          address?: { country?: string }
+        }[]
+      >()
+      .exec()
+
+    const updates = raw.flatMap((item) => {
+      const fields = phoneFields(item.phone, item.address?.country)
+      if (!fields.phoneType && !fields.phoneCountry) return []
+      const $set = Object.fromEntries(
+        Object.entries(fields).filter(([, value]) => value !== undefined)
+      )
+      return [{ updateOne: { filter: { _id: item._id }, update: { $set } } }]
+    })
+    if (updates.length > 0) await BusinessModel.bulkWrite(updates)
+    return updates.length
   },
 
   /** The WhatsApp texts of every saved approach, for bulk text fixes. */
@@ -402,6 +505,39 @@ export const businessRepository = {
         (value): value is string => typeof value === "string" && value !== ""
       )
       .sort((a, b) => a.localeCompare(b, "pt-BR"))
+  },
+
+  /** Countries of the leads, as leadCountry() reads them. */
+  async countries(): Promise<string[]> {
+    await connectToDatabase()
+    const rows = await BusinessModel.aggregate<{ _id: string | null }>([
+      {
+        $group: {
+          _id: {
+            $let: {
+              vars: {
+                address: { $ifNull: ["$address.country", ""] },
+                phone: { $ifNull: ["$phoneCountry", ""] },
+              },
+              in: {
+                $cond: [
+                  { $ne: ["$$address", ""] },
+                  "$$address",
+                  { $cond: [{ $ne: ["$$phone", ""] }, "$$phone", "BR"] },
+                ],
+              },
+            },
+          },
+        },
+      },
+    ])
+    return [
+      ...new Set(
+        rows
+          .map((row) => row._id?.toUpperCase())
+          .filter((code): code is string => Boolean(code))
+      ),
+    ]
   },
 
   async stats() {

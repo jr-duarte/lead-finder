@@ -1,13 +1,7 @@
 import { OPEN_CAMPAIGN_STATUSES, type CampaignItem } from "@/domain/campaign"
 import { campaignRepository } from "@/repositories/campaign.repository"
-import { businessRepository } from "@/repositories/business.repository"
-import { settingsRepository } from "@/repositories/settings.repository"
-import {
-  approachService,
-  stripDashes,
-  stripSignature,
-} from "@/services/approach.service"
 import { checkLeads } from "@/services/campaign/eligibility"
+import { campaignMessageService } from "@/services/campaign/message"
 import { whatsappSessionService } from "@/services/whatsapp/session.service"
 
 /**
@@ -45,32 +39,27 @@ async function generateItem(item: CampaignItem): Promise<void> {
     return
   }
 
-  // An approach generated before is reused: no need to spend plan usage.
-  const business = await businessRepository.findById(item.businessId)
-  let message = business?.approach?.whatsapp
-  if (!message) {
-    try {
-      const updated = await approachService.generate(item.businessId)
-      message = updated.approach?.whatsapp
-    } catch (error) {
-      await campaignRepository.updateItem(item.id, {
-        status: "FAILED",
-        reason: errorMessage(error, "Não foi possível gerar a abordagem."),
-      })
-      return
-    }
-  }
-  if (!message?.trim()) {
+  // Always written for this campaign, even when the lead has a saved
+  // approach: the campaign's angle is what sets the pitch.
+  const campaign = await campaignRepository.findById(item.campaignId)
+  if (!campaign) return
+  let message: string
+  try {
+    message = await campaignMessageService.write(item.businessId, campaign)
+  } catch (error) {
     await campaignRepository.updateItem(item.id, {
       status: "FAILED",
-      reason: "A abordagem veio sem mensagem de WhatsApp.",
+      reason: errorMessage(error, "Não foi possível gerar a mensagem."),
     })
     return
   }
-
-  // Approaches saved before signatures were banned may still carry one.
-  const { sellerName } = await settingsRepository.getSeller()
-  message = stripSignature(stripDashes(message), sellerName)
+  if (!message) {
+    await campaignRepository.updateItem(item.id, {
+      status: "FAILED",
+      reason: "O Claude não escreveu a mensagem.",
+    })
+    return
+  }
 
   // Checked now when possible, so leads without WhatsApp never reach the
   // queue. Offline, the check happens again right before sending.
@@ -123,14 +112,14 @@ async function run(): Promise<void> {
     )
     if (!item) break
 
-    log(`gerando abordagem para ${item.businessName}`)
+    log(`gerando mensagem para ${item.businessName}`)
     try {
       await generateItem(item)
     } catch (error) {
       console.error("[campanha] falha ao gerar item", error)
       await campaignRepository.updateItem(item.id, {
         status: "FAILED",
-        reason: errorMessage(error, "Erro inesperado ao gerar a abordagem."),
+        reason: errorMessage(error, "Erro inesperado ao gerar a mensagem."),
       })
     }
   }

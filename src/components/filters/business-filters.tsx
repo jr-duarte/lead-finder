@@ -16,8 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Combobox } from "@/components/filters/combobox"
+import { MultiCombobox } from "@/components/filters/multi-combobox"
 import { DateRangeFilter } from "@/components/filters/date-range-filter"
+import { countryName } from "@/domain/phone"
 import { PIPELINE_COLUMNS, PIPELINE_STAGE_LABELS } from "@/domain/pipeline"
+import { CATEGORY_SEPARATOR } from "@/schemas/business"
 import type { FiltersState } from "@/viewmodels/use-business-filters"
 import type { FilterOptionsDTO } from "@/types/api"
 
@@ -56,6 +59,14 @@ export function BusinessFilters({
   onExport: () => void
   isExportDisabled?: boolean
 }) {
+  const countries = React.useMemo(
+    () =>
+      [...(options?.countries ?? [])].sort((a, b) =>
+        (countryName(a) ?? a).localeCompare(countryName(b) ?? b, "pt-BR")
+      ),
+    [options?.countries]
+  )
+
   // Local mirror so typing stays responsive; the URL updates after a pause.
   const [searchDraft, setSearchDraft] = React.useState(filters.search)
 
@@ -96,13 +107,39 @@ export function BusinessFilters({
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
           <Label className="text-muted-foreground text-xs">Categoria</Label>
-          <Combobox
+          <MultiCombobox
             options={options?.categories ?? []}
-            value={filters.category}
-            onChange={(value) => onChange({ category: value })}
+            value={
+              filters.category
+                ? filters.category.split(CATEGORY_SEPARATOR).filter(Boolean)
+                : []
+            }
+            onChange={(value) =>
+              onChange({ category: value.join(CATEGORY_SEPARATOR) })
+            }
             placeholder="Todas"
             searchPlaceholder="Buscar categoria..."
             allLabel="Todas as categorias"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-muted-foreground text-xs">País</Label>
+          <MultiCombobox
+            options={countries}
+            value={
+              filters.country
+                ? filters.country.split(CATEGORY_SEPARATOR).filter(Boolean)
+                : []
+            }
+            onChange={(value) =>
+              onChange({ country: value.join(CATEGORY_SEPARATOR) })
+            }
+            getLabel={(code) => countryName(code) ?? code}
+            countLabel={(count) => `${count} países`}
+            placeholder="Todos"
+            searchPlaceholder="Buscar país..."
+            allLabel="Todos os países"
           />
         </div>
 
@@ -177,6 +214,26 @@ export function BusinessFilters({
                   {option.label} telefone
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-muted-foreground text-xs">WhatsApp</Label>
+          <Select
+            value={filters.whatsapp}
+            onValueChange={(value) => onChange({ whatsapp: value })}
+          >
+            <SelectTrigger
+              className="w-full"
+              title="Celular no telefone do Google ou link de WhatsApp no site"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any">Todos</SelectItem>
+              <SelectItem value="yes">Com celular / WhatsApp</SelectItem>
+              <SelectItem value="no">Sem celular / WhatsApp</SelectItem>
             </SelectContent>
           </Select>
         </div>

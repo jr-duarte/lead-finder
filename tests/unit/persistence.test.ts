@@ -325,3 +325,76 @@ describe("businessService.exportCsv", () => {
     expect(csv).toContain('Bar do ""Zé""')
   })
 })
+
+describe("telefone e país", () => {
+  it("classifica o telefone ao coletar e filtra por país e WhatsApp", async () => {
+    await persistPlaces(
+      [
+        place({
+          externalId: "br-cel",
+          phone: "+5511999990001",
+          address: { country: "BR" },
+        }),
+        place({
+          externalId: "br-fixo",
+          phone: "+551133334444",
+          address: { country: "BR" },
+        }),
+        place({
+          externalId: "pt-cel",
+          phone: "+351912345678",
+          address: { country: "PT" },
+        }),
+        // No country anywhere: counts as Brazil.
+        place({ externalId: "sem-pais", address: {} }),
+      ],
+      "000000000000000000000001"
+    )
+
+    const types = await BusinessModel.find()
+      .sort({ externalId: 1 })
+      .lean<{ externalId: string; phoneType?: string }[]>()
+    expect(
+      Object.fromEntries(types.map((item) => [item.externalId, item.phoneType]))
+    ).toEqual({
+      "br-cel": "MOBILE",
+      "br-fixo": "FIXED_LINE",
+      "pt-cel": "MOBILE",
+      "sem-pais": undefined,
+    })
+
+    expect((await businessRepository.countries()).sort()).toEqual(["BR", "PT"])
+
+    const names = async (input: Record<string, unknown>) =>
+      (await businessRepository.list(filters(input))).items
+        .map((item) => item.externalId)
+        .sort()
+
+    expect(await names({ country: "PT" })).toEqual(["pt-cel"])
+    expect(await names({ country: "BR" })).toEqual([
+      "br-cel",
+      "br-fixo",
+      "sem-pais",
+    ])
+    expect(await names({ whatsapp: "yes" })).toEqual(["br-cel", "pt-cel"])
+    expect(await names({ whatsapp: "yes", country: "BR" })).toEqual(["br-cel"])
+  })
+
+  it("preenche o tipo de leads antigos e recalcula ao editar o telefone", async () => {
+    const legacy = await BusinessModel.create({
+      externalId: "antigo",
+      source: "manual",
+      name: "Antigo",
+      phone: "(11) 99999-0001",
+    })
+    expect(await businessRepository.backfillPhoneFields()).toBe(1)
+    expect(
+      (await businessRepository.findById(String(legacy._id)))?.phoneType
+    ).toBe("MOBILE")
+
+    const edited = await businessRepository.update(String(legacy._id), {
+      phone: "(11) 3333-4444",
+    })
+    expect(edited?.phoneType).toBe("FIXED_LINE")
+  })
+})

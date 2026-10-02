@@ -1,4 +1,5 @@
 import type { LeadApproach } from "@/domain/approach"
+import type { PhoneType } from "@/domain/phone"
 import type { PipelineEntry } from "@/domain/pipeline"
 
 /**
@@ -128,6 +129,10 @@ export type Business = {
   cnpj?: string
   category?: string
   phone?: string
+  /** Derived from `phone` when saved; see domain/phone. */
+  phoneType?: PhoneType
+  /** Country of the phone's country code (ISO alpha-2). */
+  phoneCountry?: string
   website?: string
   rating?: number
   reviewsCount?: number

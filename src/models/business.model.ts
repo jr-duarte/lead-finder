@@ -7,6 +7,7 @@ import {
 } from "mongoose"
 
 import { BUSINESS_STATUS } from "@/domain/business"
+import { PHONE_TYPES } from "@/domain/phone"
 import { PIPELINE_STAGES } from "@/domain/pipeline"
 
 const addressSchema = new Schema(
@@ -134,6 +135,9 @@ const businessSchema = new Schema(
     cnpj: { type: String, trim: true, index: true },
     category: { type: String, trim: true },
     phone: { type: String, trim: true },
+    /** Derived from phone + address.country on every write; see domain/phone. */
+    phoneType: { type: String, enum: PHONE_TYPES, index: true },
+    phoneCountry: String,
     website: { type: String, trim: true },
     rating: { type: Number, min: 0, max: 5 },
     reviewsCount: { type: Number, min: 0, default: 0 },

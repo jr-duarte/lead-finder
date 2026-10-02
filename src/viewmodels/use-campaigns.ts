@@ -84,6 +84,7 @@ export function useCreateCampaign() {
   return useMutation({
     mutationFn: (input: {
       name: string
+      brief?: string
       businessIds: string[]
       intervalMinutes?: number
     }) =>
@@ -114,8 +115,10 @@ export function useUpdateCampaign(id: string) {
   return useMutation({
     mutationFn: (patch: {
       name?: string
+      brief?: string
       intervalMinutes?: number
       window?: SendWindow
+      timeZone?: string
       startAt?: string | null
     }) =>
       apiFetch<CampaignDTO>(`/api/campaigns/${id}`, {
@@ -130,10 +133,11 @@ export function useUpdateCampaign(id: string) {
   })
 }
 
-/** Approve all, start, pause, cancel and retry: same shape, no body. */
+/** Approve all, start, pause, cancel, retry, rewrite: same shape, no body. */
 export function useCampaignAction(
   id: string,
-  action: "approve-all" | "start" | "pause" | "cancel" | "retry-failed",
+  action:
+    "approve-all" | "start" | "pause" | "cancel" | "retry-failed" | "rewrite",
   success?: string
 ) {
   const invalidate = useInvalidate()

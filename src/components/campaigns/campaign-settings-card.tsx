@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { SendWindow } from "@/domain/campaign"
+import { SEND_TIME_ZONES, type SendWindow } from "@/domain/campaign"
 import type { CampaignDTO } from "@/types/api"
 import { useUpdateCampaign } from "@/viewmodels/use-campaigns"
 
@@ -86,6 +86,11 @@ export function CampaignSettingsCard({
   )
   const [window, setWindow] = React.useState<SendWindow>(campaign.window)
   const [startAt, setStartAt] = React.useState(toLocalInput(campaign.startAt))
+  const [timeZone, setTimeZone] = React.useState(campaign.timeZone)
+  // A zone set elsewhere (or a future default) still shows in the list.
+  const zones = SEND_TIME_ZONES.some((zone) => zone.value === timeZone)
+    ? SEND_TIME_ZONES
+    : [{ value: timeZone, label: timeZone }, ...SEND_TIME_ZONES]
 
   const toggleDay = (day: number) =>
     setWindow((current) => ({
@@ -168,8 +173,8 @@ export function CampaignSettingsCard({
         </div>
 
         <div className="space-y-2">
-          <Label>Horário de envio (horário de Brasília)</Label>
-          <div className="flex items-center gap-2 text-sm">
+          <Label>Horário de envio</Label>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-muted-foreground">das</span>
             <HourSelect
               label="Hora inicial"
@@ -190,7 +195,28 @@ export function CampaignSettingsCard({
               hours={HOURS.slice(1)}
               disabled={disabled}
             />
+            <span className="text-muted-foreground">no horário de</span>
+            <Select
+              value={timeZone}
+              onValueChange={setTimeZone}
+              disabled={disabled}
+            >
+              <SelectTrigger className="w-56" aria-label="Fuso horário">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {zones.map((zone) => (
+                  <SelectItem key={zone.value} value={zone.value}>
+                    {zone.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          <p className="text-muted-foreground text-xs">
+            Use o fuso dos leads: das 9h às 18h no horário deles. O limite
+            diário continua contando os dias de Brasília.
+          </p>
         </div>
 
         <div className="flex justify-end">
@@ -200,6 +226,7 @@ export function CampaignSettingsCard({
               update.mutate({
                 intervalMinutes: intervalValue,
                 window,
+                timeZone,
                 startAt: startAt ? new Date(startAt).toISOString() : null,
               })
             }

@@ -1,5 +1,6 @@
 import { Types } from "mongoose"
 
+import { phoneFields } from "@/domain/phone"
 import { computeProgress } from "@/domain/search"
 import { connectToDatabase } from "@/lib/mongoose"
 import { BusinessModel } from "@/models/business.model"
@@ -62,6 +63,7 @@ export async function persistPlaces(
         name: place.name,
         category: place.category,
         phone: place.phone,
+        ...phoneFields(place.phone, place.address?.country),
         website: place.website,
         rating: place.rating,
         reviewsCount: place.reviewsCount,

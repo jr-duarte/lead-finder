@@ -17,7 +17,7 @@ export const CAMPAIGN_STATUS = [
 export type CampaignStatus = (typeof CAMPAIGN_STATUS)[number]
 
 export const CAMPAIGN_STATUS_LABELS: Record<CampaignStatus, string> = {
-  GENERATING: "Gerando abordagens",
+  GENERATING: "Gerando mensagens",
   REVIEW: "Aguardando aprovação",
   RUNNING: "Enviando",
   PAUSED: "Pausada",
@@ -60,7 +60,7 @@ export type CampaignItemStatus = (typeof CAMPAIGN_ITEM_STATUS)[number]
 
 export const CAMPAIGN_ITEM_STATUS_LABELS: Record<CampaignItemStatus, string> = {
   PENDING: "Na fila para gerar",
-  GENERATING: "Gerando abordagem",
+  GENERATING: "Gerando mensagem",
   READY: "Aguardando aprovação",
   APPROVED: "Na fila de envio",
   SENDING: "Enviando",
@@ -96,17 +96,109 @@ export const DEFAULT_SEND_WINDOW: SendWindow = {
   endHour: 18,
 }
 
-/** All schedules are read in Brazilian time, whatever the server says. */
+/**
+ * Default time zone of a campaign's send window, and the one the account-wide
+ * daily limit counts days in, whatever the server says.
+ */
 export const CAMPAIGN_TIME_ZONE = "America/Sao_Paulo"
+
+/** Time zones offered for the send window, with a label for the picker. */
+export const SEND_TIME_ZONES: { value: string; label: string }[] = [
+  { value: "America/Sao_Paulo", label: "Brasília" },
+  { value: "America/Manaus", label: "Manaus" },
+  { value: "America/Rio_Branco", label: "Rio Branco" },
+  { value: "Europe/Lisbon", label: "Portugal" },
+  { value: "Europe/Madrid", label: "Espanha" },
+  { value: "Europe/London", label: "Reino Unido" },
+  { value: "Europe/Dublin", label: "Irlanda" },
+  { value: "Europe/Paris", label: "França" },
+  { value: "Europe/Rome", label: "Itália" },
+  { value: "Europe/Berlin", label: "Alemanha" },
+  { value: "America/Argentina/Buenos_Aires", label: "Argentina" },
+  { value: "America/Montevideo", label: "Uruguai" },
+  { value: "America/Asuncion", label: "Paraguai" },
+  { value: "America/Santiago", label: "Chile" },
+  { value: "America/Bogota", label: "Colômbia" },
+  { value: "America/Lima", label: "Peru" },
+  { value: "America/Mexico_City", label: "México (Cidade do México)" },
+  { value: "America/New_York", label: "EUA (Leste)" },
+  { value: "America/Chicago", label: "EUA (Central)" },
+  { value: "America/Denver", label: "EUA (Montanha)" },
+  { value: "America/Los_Angeles", label: "EUA (Pacífico)" },
+  { value: "America/Toronto", label: "Canadá (Leste)" },
+  { value: "Africa/Luanda", label: "Angola" },
+  { value: "Africa/Maputo", label: "Moçambique" },
+]
+
+/**
+ * A lead country's time zone, for the default of a new campaign. Countries
+ * with several zones map to the most populous one.
+ */
+const COUNTRY_TIME_ZONES: Record<string, string> = {
+  BR: "America/Sao_Paulo",
+  PT: "Europe/Lisbon",
+  ES: "Europe/Madrid",
+  GB: "Europe/London",
+  IE: "Europe/Dublin",
+  FR: "Europe/Paris",
+  IT: "Europe/Rome",
+  DE: "Europe/Berlin",
+  AR: "America/Argentina/Buenos_Aires",
+  UY: "America/Montevideo",
+  PY: "America/Asuncion",
+  CL: "America/Santiago",
+  CO: "America/Bogota",
+  PE: "America/Lima",
+  MX: "America/Mexico_City",
+  US: "America/New_York",
+  CA: "America/Toronto",
+  AO: "Africa/Luanda",
+  MZ: "Africa/Maputo",
+}
+
+/** The time zone most of the leads live in; Brasília when unknown. */
+export function timeZoneForCountries(countries: string[]): string {
+  const counts = new Map<string, number>()
+  for (const country of countries) {
+    const zone = COUNTRY_TIME_ZONES[country.toUpperCase()]
+    if (zone) counts.set(zone, (counts.get(zone) ?? 0) + 1)
+  }
+  let best = CAMPAIGN_TIME_ZONE
+  let bestCount = 0
+  for (const [zone, count] of counts) {
+    if (count > bestCount) {
+      best = zone
+      bestCount = count
+    }
+  }
+  return best
+}
+
+/** Whether the runtime knows this IANA zone. */
+export function isValidTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value })
+    return true
+  } catch {
+    return false
+  }
+}
 
 export type CampaignCounts = Record<CampaignItemStatus, number>
 
 export type Campaign = {
   id: string
   name: string
+  /**
+   * The angle of this campaign's first messages (who it targets, what to
+   * highlight, what to avoid), passed to Claude with every lead.
+   */
+  brief?: string
   status: CampaignStatus
   intervalMinutes: number
   window: SendWindow
+  /** IANA zone the send window is read in: the leads' local time. */
+  timeZone: string
   /** Nothing is sent before this moment. */
   startAt?: Date
   /** When the next message is due; set while running. */

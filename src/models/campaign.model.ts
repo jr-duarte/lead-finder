@@ -6,7 +6,7 @@ import {
   type Model,
 } from "mongoose"
 
-import { CAMPAIGN_STATUS } from "@/domain/campaign"
+import { CAMPAIGN_STATUS, CAMPAIGN_TIME_ZONE } from "@/domain/campaign"
 
 const windowSchema = new Schema(
   {
@@ -20,6 +20,7 @@ const windowSchema = new Schema(
 const campaignSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 120 },
+    brief: { type: String, trim: true, maxlength: 2000 },
     status: {
       type: String,
       enum: CAMPAIGN_STATUS,
@@ -28,6 +29,7 @@ const campaignSchema = new Schema(
     },
     intervalMinutes: { type: Number, required: true, min: 2 },
     window: { type: windowSchema, default: () => ({}) },
+    timeZone: { type: String, default: CAMPAIGN_TIME_ZONE },
     startAt: Date,
     nextSendAt: Date,
     lastSentAt: Date,

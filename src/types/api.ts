@@ -29,6 +29,8 @@ export type FilterOptionsDTO = {
   categories: string[]
   cities: string[]
   states: string[]
+  /** ISO alpha-2 codes. */
+  countries: string[]
 }
 
 export type DashboardDTO = {

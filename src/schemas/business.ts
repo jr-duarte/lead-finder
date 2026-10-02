@@ -14,9 +14,26 @@ const optionalString = z
   .optional()
   .transform((value) => (value === "" ? undefined : value))
 
+/** Separates several categories in one query parameter. */
+export const CATEGORY_SEPARATOR = "|"
+
+/** Splits a multi-value parameter ("a|b") into its values. */
+function multiValue(transform: (value: string) => string = (value) => value) {
+  return optionalString.transform((value) => {
+    const list = value
+      ?.split(CATEGORY_SEPARATOR)
+      .map((item) => transform(item.trim()))
+      .filter(Boolean)
+    return list?.length ? list : undefined
+  })
+}
+
 export const businessFiltersSchema = z.object({
   search: optionalString,
-  category: optionalString,
+  /** One or more categories, joined by CATEGORY_SEPARATOR. */
+  category: multiValue(),
+  /** ISO alpha-2 codes, joined by CATEGORY_SEPARATOR. */
+  country: multiValue((value) => value.toUpperCase()),
   city: optionalString,
   state: optionalString,
   minRating: z.coerce.number().min(0).max(5).optional(),
@@ -24,6 +41,8 @@ export const businessFiltersSchema = z.object({
   website: presenceSchema.default("any"),
   phone: presenceSchema.default("any"),
   instagram: presenceSchema.default("any"),
+  /** "yes": a mobile phone or a WhatsApp link from the site. */
+  whatsapp: presenceSchema.default("any"),
   status: z.enum(BUSINESS_STATUS).optional(),
   /** "any" ignores the funnel; "in"/"out" filter by board membership. */
   pipeline: z.enum(["any", "in", "out"]).default("any"),

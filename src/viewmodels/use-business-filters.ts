@@ -8,6 +8,7 @@ import type { BusinessFiltersInput } from "@/schemas/business"
 export type FiltersState = {
   search: string
   category: string
+  country: string
   city: string
   state: string
   minRating: string
@@ -15,6 +16,7 @@ export type FiltersState = {
   website: string
   phone: string
   instagram: string
+  whatsapp: string
   collectedFrom: string
   collectedTo: string
   hideClosed: string
@@ -29,6 +31,7 @@ export type FiltersState = {
 export const DEFAULT_FILTERS: FiltersState = {
   search: "",
   category: "",
+  country: "",
   city: "",
   state: "",
   minRating: "",
@@ -36,6 +39,7 @@ export const DEFAULT_FILTERS: FiltersState = {
   website: "any",
   phone: "any",
   instagram: "any",
+  whatsapp: "any",
   collectedFrom: "",
   collectedTo: "",
   hideClosed: "true",
@@ -66,6 +70,7 @@ export function useBusinessFilters() {
     return {
       search: read("search"),
       category: read("category"),
+      country: read("country"),
       city: read("city"),
       state: read("state"),
       minRating: read("minRating"),
@@ -73,6 +78,7 @@ export function useBusinessFilters() {
       website: read("website"),
       phone: read("phone"),
       instagram: read("instagram"),
+      whatsapp: read("whatsapp"),
       collectedFrom: read("collectedFrom"),
       collectedTo: read("collectedTo"),
       hideClosed: read("hideClosed"),
@@ -143,6 +149,7 @@ export function useBusinessFilters() {
     () => ({
       search: filters.search || undefined,
       category: filters.category || undefined,
+      country: filters.country || undefined,
       city: filters.city || undefined,
       state: filters.state || undefined,
       minRating: filters.minRating ? Number(filters.minRating) : undefined,
@@ -150,6 +157,7 @@ export function useBusinessFilters() {
       website: filters.website as BusinessFiltersInput["website"],
       phone: filters.phone as BusinessFiltersInput["phone"],
       instagram: filters.instagram as BusinessFiltersInput["instagram"],
+      whatsapp: filters.whatsapp as BusinessFiltersInput["whatsapp"],
       collectedFrom: filters.collectedFrom || undefined,
       collectedTo: filters.collectedTo || undefined,
       // Only sent when opting out, since the API already defaults to hiding.

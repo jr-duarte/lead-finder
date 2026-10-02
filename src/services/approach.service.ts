@@ -2,6 +2,7 @@ import type { LeadApproach, SellerProfile } from "@/domain/approach"
 import { hasOffer } from "@/domain/approach"
 import { OPERATIONAL_STATUS_LABELS, type Business } from "@/domain/business"
 import { formatCnpj } from "@/domain/cnpj"
+import { countryName, leadCountry } from "@/domain/phone"
 import type { Note } from "@/domain/note"
 import { PIPELINE_STAGE_LABELS } from "@/domain/pipeline"
 import { runClaude } from "@/lib/claude-cli"
@@ -37,7 +38,18 @@ As mensagens saem do celular e do e-mail do próprio vendedor. Se o dono do neg�
 - WhatsApp e follow-up nunca terminam com assinatura nem despedida ("Abraço, Fulano", nome no fim, nome da empresa no fim). A pessoa já vê quem mandou, e nome no final denuncia mensagem automática. Se fizer sentido se apresentar, faça no começo e de um jeito natural ("aqui é o Junior").
 - No e-mail, termine só com o primeiro nome, como alguém faz de verdade.`
 
-const SYSTEM_PROMPT = `Você é um SDR sênior que prospecta pequenas e médias empresas no Brasil. Escreve abordagens comerciais em português do Brasil para um vendedor que vai enviá-las pessoalmente.
+/**
+ * Leads abroad get messages in their own language. The writing rules above
+ * were written for Brazilian Portuguese, so they are carried over in spirit.
+ */
+export const LANGUAGE_RULES = `Idioma:
+- O que vai para o lead é escrito no idioma falado no país dele (campo "País" da seção Lead). Brasil ou país não informado: português do Brasil.
+- Portugal, Angola, Moçambique e outros países lusófonos: português de lá, com o vocabulário local (em Portugal, "telemóvel", "estou a ver"), sem gírias brasileiras como "pra" e "tô".
+- Países de língua espanhola: o espanhol daquele país. Os demais: o idioma principal do país.
+- As regras de escrita humana foram pensadas para o português do Brasil. Em outro idioma, aplique o equivalente: o tom falado e informal daquele idioma, sem as marcas típicas de texto de IA dele.
+- Se as instruções do vendedor ou da campanha definirem o idioma, elas valem.`
+
+const SYSTEM_PROMPT = `Você é um SDR sênior que prospecta pequenas e médias empresas no Brasil. Escreve abordagens comerciais para um vendedor brasileiro que vai enviá-las pessoalmente.
 
 Regras:
 - Use apenas os fatos fornecidos sobre o lead. Não invente números, clientes, resultados nem conversas anteriores.
@@ -52,8 +64,11 @@ Regras:
 - Só chame alguém pelo nome se houver um único sócio-administrador em empresa pequena; caso contrário, use uma saudação neutra.
 - Se houver anotações, respeite o histórico e a etapa do funil: não escreva como primeiro contato para quem já conversou.
 - Siga as instruções de tom do vendedor quando houver.
+- O diagnóstico, o gancho e as objeções são para o vendedor ler: sempre em português do Brasil. WhatsApp, e-mail, roteiro de ligação e follow-up seguem o idioma do lead.
 
-${HUMAN_WRITING_RULES}`
+${HUMAN_WRITING_RULES}
+
+${LANGUAGE_RULES}`
 
 const APPROACH_SCHEMA = {
   type: "object",
@@ -263,6 +278,7 @@ export function describeLead(
       line("Nota no Google", business.rating?.toFixed(1)),
       line("Número de avaliações", business.reviewsCount),
       line("Telefone", business.phone),
+      line("País", countryName(leadCountry(business))),
       line("Website", business.website ?? "não tem website"),
     ]),
     section("Presença digital (coletada do site)", [

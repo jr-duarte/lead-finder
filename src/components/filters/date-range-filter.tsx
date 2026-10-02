@@ -14,9 +14,19 @@ import {
 } from "@/components/ui/popover"
 import { formatDate } from "@/lib/format"
 
+/**
+ * "2026-10-01" as local midnight. `new Date("2026-10-01")` would be UTC
+ * midnight, which in Brazil is still the day before, so the calendar and the
+ * label showed the wrong day.
+ */
 function toDate(value: string): Date | undefined {
-  if (!value) return undefined
-  const date = new Date(value)
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return undefined
+  const date = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3])
+  )
   return Number.isNaN(date.getTime()) ? undefined : date
 }
 
@@ -50,9 +60,13 @@ export function DateRangeFilter({
 
   const label = React.useMemo(() => {
     if (!from && !to) return "Qualquer data"
-    if (from && to) return `${formatDate(from)} – ${formatDate(to)}`
-    if (from) return `A partir de ${formatDate(from)}`
-    return `Até ${formatDate(to)}`
+    const fromDate = toDate(from)
+    const toDateValue = toDate(to)
+    if (from && to && from === to) return formatDate(fromDate)
+    if (from && to)
+      return `${formatDate(fromDate)} – ${formatDate(toDateValue)}`
+    if (from) return `A partir de ${formatDate(fromDate)}`
+    return `Até ${formatDate(toDateValue)}`
   }, [from, to])
 
   return (
@@ -75,9 +89,13 @@ export function DateRangeFilter({
           numberOfMonths={2}
           defaultMonth={toDate(from)}
           selected={selected}
-          onSelect={(range) =>
+          // With a full range picked, a click starts a new one instead of
+          // moving one of its ends.
+          resetOnSelect
+          onSelect={(range) => {
             onChange({ from: toIsoDay(range?.from), to: toIsoDay(range?.to) })
-          }
+            if (range?.from && range.to) setOpen(false)
+          }}
         />
         <div className="flex justify-end border-t p-2">
           <Button

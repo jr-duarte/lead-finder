@@ -2,6 +2,7 @@ import { Types } from "mongoose"
 
 import {
   CAMPAIGN_ITEM_STATUS,
+  CAMPAIGN_TIME_ZONE,
   DEFAULT_SEND_WINDOW,
   emptyCounts,
   OPEN_CAMPAIGN_STATUSES,
@@ -42,9 +43,11 @@ function toCampaign(raw: RawCampaign, counts = emptyCounts()): Campaign {
   return {
     id: String(raw._id),
     name: raw.name,
+    brief: raw.brief ?? undefined,
     status: raw.status as CampaignStatus,
     intervalMinutes: raw.intervalMinutes,
     window: toWindow(raw.window),
+    timeZone: raw.timeZone ?? CAMPAIGN_TIME_ZONE,
     startAt: raw.startAt ?? undefined,
     nextSendAt: raw.nextSendAt ?? undefined,
     lastSentAt: raw.lastSentAt ?? undefined,
@@ -117,9 +120,11 @@ export type CampaignPatch = Partial<
   Pick<
     Campaign,
     | "name"
+    | "brief"
     | "status"
     | "intervalMinutes"
     | "window"
+    | "timeZone"
     | "startAt"
     | "nextSendAt"
     | "lastSentAt"
@@ -139,8 +144,10 @@ export type ItemPatch = Partial<
 export const campaignRepository = {
   async create(input: {
     name: string
+    brief?: string
     intervalMinutes: number
     window: SendWindow
+    timeZone: string
     startAt?: Date
   }): Promise<Campaign> {
     await connectToDatabase()

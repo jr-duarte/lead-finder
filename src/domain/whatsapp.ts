@@ -3,6 +3,8 @@
  * Pure TypeScript: no Baileys, no Mongoose, no I/O.
  */
 
+import { analyzePhone } from "@/domain/phone"
+
 export const WHATSAPP_STATUS = [
   "DISCONNECTED",
   "INITIALIZING",
@@ -224,31 +226,49 @@ export function formatWhatsAppPhone(digits?: string | null): string {
 
 /**
  * Turns a phone as stored on a lead into WhatsApp digits (country code
- * included). Numbers without a country code are taken as Brazilian. Returns
- * undefined for anything that cannot be a phone number.
+ * included). A number with "+" or a WhatsApp link keeps its own country code;
+ * one without is read in `country`, the lead's country (Brazil by default).
+ * Returns undefined for anything that cannot be a phone number.
  */
-export function toWhatsAppNumber(raw?: string | null): string | undefined {
-  const digits = raw?.replace(/\D/g, "")
-  if (!digits || digits.length < 10) return undefined
-  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13))
-    return digits
-  if (raw?.trim().startsWith("+")) return digits
-  if (digits.length === 10 || digits.length === 11) return `55${digits}`
-  return undefined
+export function toWhatsAppNumber(
+  raw?: string | null,
+  country?: string | null
+): string | undefined {
+  const info = analyzePhone(raw, country)
+  if (!info?.digits) return undefined
+  // An invalid number is still worth asking WhatsApp about when it is long
+  // enough to carry an area code (old 8-digit mobiles, for one).
+  if (!info.type && (raw?.replace(/\D/g, "").length ?? 0) < 10) {
+    return undefined
+  }
+  return info.digits
+}
+
+/** A number saved from a wa.me link, which carries the country code. */
+function whatsappLinkNumber(raw?: string | null): string | undefined {
+  const text = raw?.trim()
+  if (!text) return undefined
+  const digits = text.replace(/\D/g, "")
+  // Brazilian numbers saved without the 55.
+  if (!text.startsWith("+") && (digits.length === 10 || digits.length === 11))
+    return toWhatsAppNumber(digits, "BR")
+  return toWhatsAppNumber(`+${digits}`)
 }
 
 /** A lead's numbers worth trying, best first: WhatsApp link, phone, registry. */
 export function leadWhatsAppCandidates(lead: {
   phone?: string
+  address?: { country?: string }
   enrichment?: { socials?: { whatsapp?: string } }
   registry?: { phones?: string[] }
 }): string[] {
   const candidates = [
-    lead.enrichment?.socials?.whatsapp,
-    lead.phone,
-    ...(lead.registry?.phones ?? []),
-  ]
-    .map(toWhatsAppNumber)
-    .filter((value): value is string => Boolean(value))
+    whatsappLinkNumber(lead.enrichment?.socials?.whatsapp),
+    toWhatsAppNumber(lead.phone, lead.address?.country),
+    // Receita Federal numbers are always Brazilian.
+    ...(lead.registry?.phones ?? []).map((phone) =>
+      toWhatsAppNumber(phone, "BR")
+    ),
+  ].filter((value): value is string => Boolean(value))
   return [...new Set(candidates)]
 }

@@ -1,3 +1,4 @@
+import { analyzePhone } from "@/domain/phone"
 import { normalizePlace } from "@crawler/parsers/place.parser"
 import type {
   PlaceSearchInput,
@@ -157,7 +158,12 @@ export class OsmPlaceSource implements PlaceSource {
         city: tags["addr:city"] ?? input.location.split(",")[0]?.trim(),
         state: tags["addr:state"],
         postalCode: tags["addr:postcode"],
-        country: tags["addr:country"] ?? "BR",
+        // OSM phones carry the country code by convention, so they place a
+        // lead found abroad; Brazil only when nothing says otherwise.
+        country:
+          tags["addr:country"] ??
+          analyzePhone(tags.phone ?? tags["contact:phone"])?.country ??
+          "BR",
       },
       location: { latitude, longitude },
     }

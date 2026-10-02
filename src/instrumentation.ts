@@ -13,6 +13,20 @@ export async function register() {
     console.error("[whatsapp] falha ao reconectar na inicialização", error)
   })
 
+  // Leads saved before phones had a type get one, so the WhatsApp filter
+  // sees them.
+  const { businessRepository } =
+    await import("@/repositories/business.repository")
+  void businessRepository
+    .backfillPhoneFields()
+    .then((count) => {
+      if (count > 0)
+        console.info(`[leads] tipo de telefone em ${count} lead(s)`)
+    })
+    .catch((error) => {
+      console.error("[leads] falha ao classificar telefones", error)
+    })
+
   // Campaigns resume where they stopped; the send queue waits for WhatsApp.
   const { campaignService } =
     await import("@/services/campaign/campaign.service")

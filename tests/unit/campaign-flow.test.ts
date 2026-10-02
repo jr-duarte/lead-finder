@@ -16,7 +16,8 @@ import {
 import { startTestDatabase } from "../helpers/db"
 import { FakeWhatsAppClient } from "../helpers/fake-whatsapp"
 
-const runClaude = vi.fn(async () => ({
+const runClaude = vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({
+  message: "Oi, vi que vocês não têm site — posso te mostrar uma ideia?",
   diagnosis: "d",
   hook: "h",
   whatsapp: "Oi, vi que vocês não têm site — posso te mostrar uma ideia?",
@@ -29,7 +30,7 @@ const runClaude = vi.fn(async () => ({
 
 vi.mock("@/lib/claude-cli", () => ({
   ClaudeCliError: class extends Error {},
-  runClaude: (...args: unknown[]) => runClaude(...(args as [])),
+  runClaude: (...args: unknown[]) => runClaude(...args),
 }))
 
 const { BusinessModel } = await import("@/models/business.model")
@@ -232,38 +233,48 @@ describe("criação e geração", () => {
     expect(campaign?.status).toBe("REVIEW")
   })
 
-  it("reaproveita a abordagem já gerada sem chamar o Claude", async () => {
+  it("escreve a mensagem da campanha com o ângulo, mesmo com abordagem salva", async () => {
     const id = await seedLead("Com Abordagem", "(11) 99999-0001", {
       approach: {
         generatedAt: new Date(),
-        whatsapp: "Mensagem pronta",
+        whatsapp: "Mensagem antiga",
         objections: [],
       },
     })
     hasWhatsApp("5511999990001")
 
     const { campaign } = await campaignService.create({
-      name: "Reuso",
+      name: "Dentista sem site",
+      brief: "Puxe pelo número de avaliações.",
       businessIds: [id],
     })
     await waitForGeneration(campaign.id)
 
-    expect(runClaude).not.toHaveBeenCalled()
-    expect((await items(campaign.id))[0]?.message).toBe("Mensagem pronta")
+    expect(runClaude).toHaveBeenCalledTimes(1)
+    const [prompt, options] = runClaude.mock.calls[0] as [
+      string,
+      { schema: { required: string[] } },
+    ]
+    expect(prompt).toContain("Dentista sem site")
+    expect(prompt).toContain("Puxe pelo número de avaliações.")
+    expect(prompt).toContain("Com Abordagem")
+    expect(options.schema.required).toEqual(["message"])
+    expect((await items(campaign.id))[0]?.message).toBe(
+      "Oi, vi que vocês não têm site, posso te mostrar uma ideia?"
+    )
   })
 
-  it("tira a assinatura de uma abordagem antiga reaproveitada", async () => {
+  it("tira a assinatura da mensagem gerada", async () => {
     await settingsRepository.updateSeller({
       offer: "Sites para padarias",
       sellerName: "Junior Duarte",
     })
-    const id = await seedLead("Assinada", "(11) 99999-0001", {
-      approach: {
-        generatedAt: new Date(),
-        whatsapp: "Oi, posso te mostrar uma ideia?\n\nAbraço,\nJunior Duarte",
-        objections: [],
-      },
+    const reply = await runClaude()
+    runClaude.mockResolvedValueOnce({
+      ...reply,
+      message: "Oi, posso te mostrar uma ideia?\n\nAbraço,\nJunior Duarte",
     })
+    const id = await seedLead("Assinada", "(11) 99999-0001")
     hasWhatsApp("5511999990001")
 
     const { campaign } = await campaignService.create({
@@ -315,6 +326,69 @@ describe("criação e geração", () => {
     }>()
     expect(business?.approach?.whatsapp).toBe("Oi, tudo bem?")
     expect(business?.approach?.followUp).toBe("E aí, conseguiu ver?")
+  })
+
+  it("reescreve só as mensagens não enviadas, com o ângulo novo", async () => {
+    const ids: string[] = []
+    for (let index = 0; index < 3; index += 1) {
+      const digits = `551199999000${index}`
+      ids.push(await seedLead(`Lead ${index}`, `+${digits}`))
+      hasWhatsApp(digits)
+    }
+    const { campaign } = await campaignService.create({
+      name: "Padarias",
+      businessIds: ids,
+    })
+    await waitForGeneration(campaign.id)
+    await campaignService.approveAll(campaign.id)
+    const [first] = await items(campaign.id)
+    await CampaignItemModel.updateOne(
+      { _id: first.id },
+      { $set: { status: "SENT", message: "Já foi" } }
+    )
+
+    await campaignService.updateSettings(campaign.id, {
+      brief: "Fale das avaliações.",
+    })
+    runClaude.mockClear()
+    expect(await campaignService.rewriteUnsent(campaign.id)).toBe(2)
+    await waitForGeneration(campaign.id)
+
+    expect(runClaude).toHaveBeenCalledTimes(2)
+    expect(String(runClaude.mock.calls[0]?.[0])).toContain(
+      "Fale das avaliações."
+    )
+    const list = await items(campaign.id)
+    expect(list.map((item) => item.status)).toEqual(["SENT", "READY", "READY"])
+    expect(list[0]?.message).toBe("Já foi")
+    expect((await campaignRepository.findById(campaign.id))?.status).toBe(
+      "REVIEW"
+    )
+  })
+
+  it("ao retomar, espera o intervalo desde o último envio", async () => {
+    const id = await seedLead("Pausada", "(11) 99999-0001")
+    hasWhatsApp("5511999990001")
+    const { campaign } = await campaignService.create({
+      name: "Pausa",
+      businessIds: [id],
+      intervalMinutes: 10,
+    })
+    await waitForGeneration(campaign.id)
+    await campaignService.approveAll(campaign.id)
+    const lastSentAt = new Date(Date.now() - minutes(3))
+    await campaignRepository.update(campaign.id, {
+      status: "PAUSED",
+      lastSentAt,
+    })
+
+    const resumed = await campaignService.start(campaign.id)
+    await tick()
+
+    expect(resumed.nextSendAt?.getTime()).toBe(
+      lastSentAt.getTime() + minutes(10)
+    )
+    expect(client.sent).toHaveLength(0)
   })
 
   it("exige a oferta configurada", async () => {

@@ -1,6 +1,7 @@
 import { hasOffer } from "@/domain/approach"
 import {
   DEFAULT_SEND_WINDOW,
+  timeZoneForCountries,
   FINAL_ITEM_STATUSES,
   isCampaignOpen,
   OPEN_CAMPAIGN_STATUSES,
@@ -13,13 +14,10 @@ import { getEnv } from "@/lib/env"
 import { campaignRepository } from "@/repositories/campaign.repository"
 import { settingsRepository } from "@/repositories/settings.repository"
 import { businessRepository } from "@/repositories/business.repository"
-import {
-  approachService,
-  stripDashes,
-  stripSignature,
-} from "@/services/approach.service"
+import { stripDashes, stripSignature } from "@/services/approach.service"
 import { checkLeads, type LeadCheck } from "@/services/campaign/eligibility"
 import { campaignGenerator } from "@/services/campaign/generator"
+import { campaignMessageService } from "@/services/campaign/message"
 import {
   campaignSender,
   recoverInterruptedSends,
@@ -175,9 +173,11 @@ export const campaignService = {
    */
   async create(input: {
     name: string
+    brief?: string
     businessIds: string[]
     intervalMinutes?: number
     window?: SendWindow
+    timeZone?: string
     startAt?: Date
   }): Promise<{ campaign: Campaign } & AddLeadsResult> {
     await requireOffer()
@@ -194,10 +194,18 @@ export const campaignService = {
 
     const created = await campaignRepository.create({
       name: input.name,
+      brief: input.brief || undefined,
       intervalMinutes:
         input.intervalMinutes ??
         getEnv().WHATSAPP_CAMPAIGN_DEFAULT_INTERVAL_MIN,
       window: validateWindow(input.window ?? DEFAULT_SEND_WINDOW),
+      // The leads' local time by default: a window of 9h to 18h means their
+      // business hours, not Brasília's.
+      timeZone:
+        input.timeZone ??
+        timeZoneForCountries(
+          eligible.flatMap((check) => (check.country ? [check.country] : []))
+        ),
       startAt: input.startAt,
     })
     const added = await campaignRepository.addItems(
@@ -243,18 +251,22 @@ export const campaignService = {
     id: string,
     patch: {
       name?: string
+      brief?: string
       intervalMinutes?: number
       window?: SendWindow
+      timeZone?: string
       startAt?: Date | null
     }
   ): Promise<Campaign> {
     await requireOpen(id)
     await campaignRepository.update(id, {
       ...(patch.name ? { name: patch.name } : {}),
+      ...(patch.brief !== undefined ? { brief: patch.brief || undefined } : {}),
       ...(patch.intervalMinutes
         ? { intervalMinutes: patch.intervalMinutes }
         : {}),
       ...(patch.window ? { window: validateWindow(patch.window) } : {}),
+      ...(patch.timeZone ? { timeZone: patch.timeZone } : {}),
       ...(patch.startAt !== undefined
         ? { startAt: patch.startAt ?? undefined }
         : {}),
@@ -275,14 +287,29 @@ export const campaignService = {
     return approved
   },
 
-  /** Starts sending, or resumes a paused campaign. */
+  /**
+   * Starts sending, or resumes a paused campaign. A resume keeps the pace:
+   * the next message waits a full interval after the last one, so pausing
+   * and resuming never sends two in a row. Waits for the daily limit or the
+   * send window are not kept; the queue works them out again.
+   */
   async start(id: string): Promise<Campaign> {
     const campaign = await requireOpen(id)
     if (campaign.status === "RUNNING") return campaign
 
     const now = new Date()
-    const startsAt =
-      campaign.startAt && campaign.startAt > now ? campaign.startAt : now
+    const afterLast = campaign.lastSentAt
+      ? new Date(
+          campaign.lastSentAt.getTime() + campaign.intervalMinutes * 60_000
+        )
+      : now
+    const startsAt = new Date(
+      Math.max(
+        now.getTime(),
+        afterLast.getTime(),
+        campaign.startAt?.getTime() ?? 0
+      )
+    )
     await campaignRepository.transition(
       id,
       ["GENERATING", "REVIEW", "PAUSED"],
@@ -350,26 +377,53 @@ export const campaignService = {
   },
 
   /**
-   * Writes a fresh message for one lead with Claude. Waits for it, like the
-   * approach button; the item goes back to review afterwards.
+   * Writes a fresh message for one lead with Claude, from the campaign's
+   * current angle. Waits for it, like the approach button; the item goes
+   * back to review afterwards.
    */
   async regenerate(id: string, itemId: string): Promise<CampaignItem> {
-    await requireOpen(id)
+    const campaign = await requireOpen(id)
     const item = await requireItem(id, itemId)
     if (!["READY", "APPROVED", "FAILED"].includes(item.status)) {
       throw new CampaignError("Este lead não pode ser regenerado agora.", 409)
     }
-    const business = await approachService.generate(item.businessId)
-    const message = business.approach?.whatsapp?.trim()
+    const message = await campaignMessageService.write(
+      item.businessId,
+      campaign
+    )
     if (!message) {
       throw new CampaignError("O Claude não escreveu a mensagem.", 502)
     }
     await campaignRepository.updateItem(itemId, {
-      message: stripDashes(message),
+      message,
       status: "READY",
       reason: undefined,
     })
     return requireItem(id, itemId)
+  },
+
+  /**
+   * After the angle changes: every message not sent yet (waiting for
+   * approval or in the send queue) is written again in the background and
+   * comes back for review. Sent messages are never touched.
+   */
+  async rewriteUnsent(id: string): Promise<number> {
+    await requireOpen(id)
+    const rewritten = await campaignRepository.transitionItems(
+      id,
+      ["READY", "APPROVED"],
+      "PENDING"
+    )
+    if (rewritten > 0) {
+      // Back to "generating" so the page follows the progress; it returns
+      // to review when the queue is written. Running or paused campaigns
+      // keep their state.
+      await campaignRepository.transition(id, ["REVIEW"], {
+        status: "GENERATING",
+      })
+      campaignGenerator.kick()
+    }
+    return rewritten
   },
 
   /**

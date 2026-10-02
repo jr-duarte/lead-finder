@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import { WHATSAPP_PHONE_TYPES } from "@/domain/phone"
 import { buildBusinessQuery } from "@/repositories/business.repository"
 import { businessFiltersSchema } from "@/schemas/business"
 
@@ -134,5 +135,83 @@ describe("filtro de empresas encerradas", () => {
 
   it("mostra as encerradas quando o usuário opta por vê-las", () => {
     expect(buildBusinessQuery(parse({ hideClosed: "false" }))).toEqual({})
+  })
+})
+
+describe("filtro de categorias", () => {
+  it("uma categoria vira igualdade simples", () => {
+    expect(
+      buildBusinessQuery(parse({ category: "Dentista" })).$and
+    ).toContainEqual({ category: "Dentista" })
+  })
+
+  it("várias categorias separadas por | viram $in", () => {
+    const filters = parse({ category: "Dentista| Clínica odontológica |" })
+    expect(filters.category).toEqual(["Dentista", "Clínica odontológica"])
+    expect(buildBusinessQuery(filters).$and).toContainEqual({
+      category: { $in: ["Dentista", "Clínica odontológica"] },
+    })
+  })
+})
+
+describe("filtro de WhatsApp", () => {
+  const signs = [
+    { phoneType: { $in: WHATSAPP_PHONE_TYPES } },
+    { "enrichment.socials.whatsapp": { $exists: true, $nin: [null, ""] } },
+  ]
+
+  it("com: celular (de qualquer país) ou link de WhatsApp no site", () => {
+    expect(buildBusinessQuery(parse({ whatsapp: "yes" })).$and).toContainEqual({
+      $or: signs,
+    })
+  })
+
+  it("sem: nenhum dos dois", () => {
+    expect(buildBusinessQuery(parse({ whatsapp: "no" })).$and).toContainEqual({
+      $nor: signs,
+    })
+  })
+})
+
+describe("filtro de data da coleta", () => {
+  it("usa os dias do calendário de Brasília, incluindo o último dia inteiro", () => {
+    const query = buildBusinessQuery(
+      parse({ collectedFrom: "2026-10-01", collectedTo: "2026-10-02" })
+    )
+    expect(query.$and).toContainEqual({
+      collectedAt: {
+        $gte: new Date("2026-10-01T03:00:00.000Z"),
+        $lte: new Date("2026-10-03T02:59:59.999Z"),
+      },
+    })
+  })
+
+  it("ignora datas em formato inválido", () => {
+    const query = buildBusinessQuery(parse({ collectedFrom: "ontem" }))
+    expect(JSON.stringify(query)).not.toContain("collectedAt")
+  })
+})
+
+describe("filtro de país", () => {
+  it("usa o país do endereço, depois o do telefone, e Brasil sem nenhum", () => {
+    const filters = parse({ country: "br|pt" })
+    expect(filters.country).toEqual(["BR", "PT"])
+
+    const noAddressCountry = { "address.country": { $in: [null, ""] } }
+    expect(buildBusinessQuery(filters).$and).toContainEqual({
+      $or: [
+        { "address.country": { $in: ["BR", "PT"] } },
+        { ...noAddressCountry, phoneCountry: { $in: ["BR", "PT"] } },
+        { ...noAddressCountry, phoneCountry: { $in: [null, ""] } },
+      ],
+    })
+  })
+
+  it("sem Brasil, leads sem país ficam de fora", () => {
+    const query = buildBusinessQuery(parse({ country: "PT" }))
+    const clause = query.$and?.find((item) => "$or" in item) as {
+      $or: unknown[]
+    }
+    expect(clause.$or).toHaveLength(2)
   })
 })

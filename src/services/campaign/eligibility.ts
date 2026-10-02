@@ -1,3 +1,4 @@
+import { leadCountry } from "@/domain/phone"
 import { leadWhatsAppCandidates } from "@/domain/whatsapp"
 import { ineligibilityReason } from "@/domain/campaign"
 import type { Business } from "@/domain/business"
@@ -8,6 +9,8 @@ import { whatsappConversationRepository } from "@/repositories/whatsapp-conversa
 export type LeadCheck = {
   businessId: string
   name: string
+  /** ISO alpha-2, to pick the send time zone of a new campaign. */
+  country?: string
   /** Null when the lead may join; otherwise why not. */
   reason: string | null
 }
@@ -51,6 +54,7 @@ export async function checkLeads(
     checks.push({
       businessId,
       name: business.name,
+      country: leadCountry(business),
       reason: ineligibilityReason({
         stage: business.pipeline?.stage ?? null,
         hasPhone: leadWhatsAppCandidates(business).length > 0,

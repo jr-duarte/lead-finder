@@ -12,6 +12,7 @@ import {
   XCircle,
 } from "lucide-react"
 
+import { CampaignBriefCard } from "@/components/campaigns/campaign-brief-card"
 import { CampaignItemsTable } from "@/components/campaigns/campaign-items-table"
 import { CampaignSettingsCard } from "@/components/campaigns/campaign-settings-card"
 import { CampaignStatusBadge } from "@/components/campaigns/campaign-status-badge"
@@ -266,10 +267,16 @@ export function CampaignDetailView({ id }: { id: string }) {
         )
       ) : null}
 
+      <CampaignBriefCard
+        key={`brief|${campaign.brief ?? ""}`}
+        campaign={campaign}
+        disabled={!open}
+      />
+
       <CampaignSettingsCard
         // Resets only when the saved settings change, never mid-edit while
         // the page refreshes during sending.
-        key={`${campaign.intervalMinutes}|${campaign.window.days.join()}|${campaign.window.startHour}|${campaign.window.endHour}|${campaign.startAt ?? ""}`}
+        key={`${campaign.intervalMinutes}|${campaign.window.days.join()}|${campaign.window.startHour}|${campaign.window.endHour}|${campaign.startAt ?? ""}|${campaign.timeZone}`}
         campaign={campaign}
         disabled={!open}
       />

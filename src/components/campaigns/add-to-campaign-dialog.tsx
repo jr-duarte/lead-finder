@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { BRIEF_PLACEHOLDER } from "@/components/campaigns/campaign-brief-card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -23,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import type { AddLeadsResultDTO } from "@/types/api"
 import {
   describeAddResult,
@@ -61,6 +63,7 @@ export function AddToCampaignDialog({
   )
   const [campaignChoice, setCampaignChoice] = React.useState("")
   const [name, setName] = React.useState("")
+  const [brief, setBrief] = React.useState("")
   const [result, setResult] = React.useState<Result | null>(null)
 
   const hasOpen = (openCampaigns?.length ?? 0) > 0
@@ -70,6 +73,7 @@ export function AddToCampaignDialog({
   const reset = () => {
     setResult(null)
     setName("")
+    setBrief("")
     setCampaignChoice("")
     setModeChoice(null)
   }
@@ -83,6 +87,7 @@ export function AddToCampaignDialog({
     if (mode === "new") {
       const created = await create.mutateAsync({
         name: name.trim(),
+        brief: brief.trim() || undefined,
         businessIds,
       })
       setResult({ ...created, campaignId: created.campaign.id })
@@ -116,8 +121,8 @@ export function AddToCampaignDialog({
             <p className="font-medium">{describeAddResult(result)}</p>
             {result.added > 0 ? (
               <p className="text-muted-foreground">
-                O Claude está escrevendo as abordagens. Revise e aprove na
-                página da campanha.
+                O Claude está escrevendo as mensagens. Revise e aprove na página
+                da campanha.
               </p>
             ) : null}
             {result.rejected.length > 0 ? (
@@ -179,6 +184,24 @@ export function AddToCampaignDialog({
                 maxLength={120}
                 aria-label="Nome da nova campanha"
               />
+              {mode === "new" ? (
+                <div className="space-y-1.5 pt-1">
+                  <Label htmlFor="campaign-brief" className="text-sm">
+                    Ângulo da mensagem{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (opcional)
+                    </span>
+                  </Label>
+                  <Textarea
+                    id="campaign-brief"
+                    value={brief}
+                    onChange={(event) => setBrief(event.target.value)}
+                    placeholder={BRIEF_PLACEHOLDER}
+                    maxLength={2000}
+                    className="min-h-20"
+                  />
+                </div>
+              ) : null}
             </div>
           </RadioGroup>
         )}

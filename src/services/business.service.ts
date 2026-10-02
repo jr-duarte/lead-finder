@@ -147,14 +147,16 @@ export const businessService = {
     categories: string[]
     cities: string[]
     states: string[]
+    countries: string[]
   }> {
-    const [categories, cities, states] = await Promise.all([
+    const [categories, cities, states, countries] = await Promise.all([
       businessRepository.distinctValues("category"),
       businessRepository.distinctValues("address.city"),
       businessRepository.distinctValues("address.state"),
+      businessRepository.countries(),
     ])
 
-    return { categories, cities, states }
+    return { categories, cities, states, countries }
   },
 
   /** CSV export of the current filter selection (all matching pages). */

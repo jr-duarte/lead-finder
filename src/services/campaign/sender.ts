@@ -1,4 +1,5 @@
 import {
+  CAMPAIGN_TIME_ZONE,
   isWithinWindow,
   jitteredIntervalMs,
   nextWindowStart,
@@ -73,6 +74,17 @@ function formatTime(date: Date): string {
     minute: "2-digit",
     timeZone: "America/Sao_Paulo",
   }).format(date)
+}
+
+/**
+ * A moment for a campaign's messages. Always in Brasília, where the user is;
+ * said so when the campaign sends in another zone, to avoid confusion.
+ */
+function formatCampaignTime(campaign: Campaign, date: Date): string {
+  const time = formatTime(date)
+  return campaign.timeZone === CAMPAIGN_TIME_ZONE
+    ? time
+    : `${time} (horário de Brasília)`
 }
 
 async function waitUntil(campaign: Campaign, when: Date, reason?: string) {
@@ -213,12 +225,16 @@ async function pass(now: Date): Promise<void> {
     const sentToday = await campaignRepository.countSentSince(startOfDay(now))
     if (sentToday >= dailyLimit) {
       for (const campaign of running) {
-        const tomorrow = nextWindowStart(startOfNextDay(now), campaign.window)
+        const tomorrow = nextWindowStart(
+          startOfNextDay(now),
+          campaign.window,
+          campaign.timeZone
+        )
         if (tomorrow) {
           await waitUntil(
             campaign,
             tomorrow,
-            `Limite diário de ${dailyLimit} primeiros contatos atingido. Continua ${formatTime(tomorrow)}.`
+            `Limite diário de ${dailyLimit} primeiros contatos atingido. Continua ${formatCampaignTime(campaign, tomorrow)}.`
           )
         }
       }
@@ -254,13 +270,13 @@ async function pass(now: Date): Promise<void> {
         continue
       }
 
-      if (!isWithinWindow(now, campaign.window)) {
-        const opens = nextWindowStart(now, campaign.window)
+      if (!isWithinWindow(now, campaign.window, campaign.timeZone)) {
+        const opens = nextWindowStart(now, campaign.window, campaign.timeZone)
         if (opens) {
           await waitUntil(
             campaign,
             opens,
-            `Fora do horário de envio. Retoma ${formatTime(opens)}.`
+            `Fora do horário de envio. Retoma ${formatCampaignTime(campaign, opens)}.`
           )
         }
         continue
