@@ -25,6 +25,17 @@ const mediaSchema = new Schema(
   { _id: false }
 )
 
+/** The message a reply points to, as WhatsApp described it. */
+const quoteSchema = new Schema(
+  {
+    whatsappMessageId: { type: String, required: true },
+    fromMe: { type: Boolean, required: true },
+    type: { type: String, enum: WHATSAPP_MESSAGE_TYPES, default: "text" },
+    body: { type: String, default: "" },
+  },
+  { _id: false }
+)
+
 const whatsappMessageSchema = new Schema(
   {
     conversationId: {
@@ -45,6 +56,7 @@ const whatsappMessageSchema = new Schema(
     fromMe: { type: Boolean, required: true },
     status: { type: String, enum: WHATSAPP_MESSAGE_STATUS },
     media: { type: mediaSchema, default: undefined },
+    quoted: { type: quoteSchema, default: undefined },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },

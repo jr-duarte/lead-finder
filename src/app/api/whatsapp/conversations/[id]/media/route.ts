@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { apiError } from "@/lib/api"
+import { replyToSchema } from "@/schemas/whatsapp"
 import {
   MediaInputError,
   prepareOutgoingMedia,
@@ -18,7 +19,8 @@ type Context = { params: Promise<{ id: string }> }
 
 /**
  * Sends an image or an audio (multipart): `file`, plus an optional `caption`
- * for images and `voiceNote=true` for recordings made in the CRM.
+ * for images, `voiceNote=true` for recordings made in the CRM and `replyTo`
+ * (a stored message id) to send it as a reply.
  */
 export async function POST(request: Request, { params }: Context) {
   try {
@@ -32,6 +34,7 @@ export async function POST(request: Request, { params }: Context) {
       )
     }
     const caption = form?.get("caption")
+    const replyTo = replyToSchema.parse(form?.get("replyTo") ?? undefined)
 
     const media = await prepareOutgoingMedia({
       data: Buffer.from(await file.arrayBuffer()),
@@ -39,7 +42,7 @@ export async function POST(request: Request, { params }: Context) {
       caption: typeof caption === "string" ? caption.slice(0, 4096) : undefined,
       voiceNote: form?.get("voiceNote") === "true",
     })
-    const message = await whatsappSessionService.sendMedia(id, media)
+    const message = await whatsappSessionService.sendMedia(id, media, replyTo)
     return NextResponse.json(message, { status: 201 })
   } catch (error) {
     if (

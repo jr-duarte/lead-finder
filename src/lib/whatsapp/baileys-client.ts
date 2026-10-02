@@ -13,9 +13,11 @@ import makeWASocket, {
   type WASocket,
 } from "baileys"
 
+import { quotePreview } from "@/domain/whatsapp"
 import type {
   WaBatch,
   WaClientHandlers,
+  WaSendOptions,
   WhatsAppClient,
   WhatsAppClientConfig,
 } from "@/lib/whatsapp/client"
@@ -91,10 +93,27 @@ export function createBaileysClient(
     items.filter((item): item is T => item !== null)
 
   // Sent messages carry no downloader: the caller already has the file.
-  const send = async (chatJid: string, content: AnyMessageContent) => {
+  const send = async (
+    chatJid: string,
+    content: AnyMessageContent,
+    options: WaSendOptions = {}
+  ) => {
     if (!socket) throw new Error("WhatsApp não está conectado.")
 
-    const sent = await socket.sendMessage(chatJid, content)
+    // Only the id has to match the original; the content is what the
+    // contact sees in the quote bar, rebuilt from what is stored.
+    const quoted: WAMessage | undefined = options.quoted
+      ? {
+          key: {
+            remoteJid: chatJid,
+            id: options.quoted.id,
+            fromMe: options.quoted.fromMe,
+          },
+          message: { conversation: quotePreview(options.quoted) || " " },
+        }
+      : undefined
+
+    const sent = await socket.sendMessage(chatJid, content, { quoted })
     const me = socket.user?.id ? jidNormalizedUser(socket.user.id) : "me"
     const normalized = sent ? normalizeMessage(sent, me) : null
     if (!normalized) {
@@ -270,11 +289,11 @@ export function createBaileysClient(
       })
     },
 
-    sendText(chatJid, text) {
-      return send(chatJid, { text })
+    sendText(chatJid, text, options) {
+      return send(chatJid, { text }, options)
     },
 
-    sendMedia(chatJid, media) {
+    sendMedia(chatJid, media, options) {
       return send(
         chatJid,
         media.kind === "image"
@@ -287,7 +306,8 @@ export function createBaileysClient(
               audio: media.data,
               mimetype: media.mimeType,
               ptt: media.voiceNote,
-            }
+            },
+        options
       )
     },
 

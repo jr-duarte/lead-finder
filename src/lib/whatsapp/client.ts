@@ -38,6 +38,20 @@ export type WaMessage = {
   pushName?: string
   /** Present for images, audio and stickers, whose file can be fetched. */
   media?: WaMedia
+  /** The message this one replies to. */
+  quoted?: WaQuote
+}
+
+export type WaQuote = {
+  id: string
+  fromMe: boolean
+  type: WhatsAppMessageType
+  body: string
+}
+
+export type WaSendOptions = {
+  /** Sends as a reply to this message. */
+  quoted?: WaQuote
 }
 
 export type WaMedia = {
@@ -105,8 +119,16 @@ export type WaOutreachStatus = {
 
 export interface WhatsAppClient {
   start(handlers: WaClientHandlers): Promise<void>
-  sendText(chatJid: string, text: string): Promise<WaMessage>
-  sendMedia(chatJid: string, media: WaOutgoingMedia): Promise<WaMessage>
+  sendText(
+    chatJid: string,
+    text: string,
+    options?: WaSendOptions
+  ): Promise<WaMessage>
+  sendMedia(
+    chatJid: string,
+    media: WaOutgoingMedia,
+    options?: WaSendOptions
+  ): Promise<WaMessage>
   /**
    * Asks WhatsApp whether a number (digits with country code) has an
    * account, returning its jid — which may differ from the digits, e.g. old

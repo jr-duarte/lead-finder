@@ -3,6 +3,8 @@ import type {
   WaMessage,
   WaOutgoingMedia,
   WaOutreachStatus,
+  WaQuote,
+  WaSendOptions,
   WhatsAppClient,
 } from "@/lib/whatsapp/client"
 
@@ -12,6 +14,8 @@ export class FakeWhatsAppClient implements WhatsAppClient {
   starts = 0
   sent: { chatJid: string; text: string }[] = []
   sentMedia: { chatJid: string; media: WaOutgoingMedia }[] = []
+  /** What each send quoted, in order, across texts and media. */
+  quotes: (WaQuote | undefined)[] = []
   loggedOut = false
   /** Numbers that "have WhatsApp", mapped to the jid WhatsApp answers with. */
   registered = new Map<string, string>()
@@ -34,12 +38,17 @@ export class FakeWhatsAppClient implements WhatsAppClient {
     this.starts += 1
   }
 
-  async sendText(chatJid: string, text: string): Promise<WaMessage> {
+  async sendText(
+    chatJid: string,
+    text: string,
+    options: WaSendOptions = {}
+  ): Promise<WaMessage> {
     if (this.failSends > 0) {
       this.failSends -= 1
       throw new Error("falha simulada de envio")
     }
     this.sent.push({ chatJid, text })
+    this.quotes.push(options.quoted)
     return {
       id: `sent-${(this.counter += 1)}`,
       chatJid,
@@ -50,11 +59,17 @@ export class FakeWhatsAppClient implements WhatsAppClient {
       type: "text",
       timestamp: new Date(),
       status: "SENT",
+      quoted: options.quoted,
     }
   }
 
-  async sendMedia(chatJid: string, media: WaOutgoingMedia): Promise<WaMessage> {
+  async sendMedia(
+    chatJid: string,
+    media: WaOutgoingMedia,
+    options: WaSendOptions = {}
+  ): Promise<WaMessage> {
     this.sentMedia.push({ chatJid, media })
+    this.quotes.push(options.quoted)
     return {
       id: `sent-${(this.counter += 1)}`,
       chatJid,
@@ -65,6 +80,7 @@ export class FakeWhatsAppClient implements WhatsAppClient {
       type: media.kind,
       timestamp: new Date(),
       status: "SENT",
+      quoted: options.quoted,
     }
   }
 

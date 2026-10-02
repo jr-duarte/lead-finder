@@ -105,6 +105,38 @@ export type WhatsAppMessageMedia = {
   voiceNote?: boolean
 }
 
+/**
+ * The message a reply points to, as WhatsApp sent it along. When the
+ * original is stored, its own data takes precedence on display.
+ */
+export type WhatsAppQuote = {
+  whatsappMessageId: string
+  fromMe: boolean
+  type: WhatsAppMessageType
+  /** Text or caption, trimmed for display. */
+  body: string
+}
+
+/** Longest quote excerpt kept with a reply. */
+export const WHATSAPP_QUOTE_MAX_LENGTH = 300
+
+/** One-line preview of a quoted message, as WhatsApp shows it. */
+export function quotePreview(quote: Pick<WhatsAppQuote, "type" | "body">) {
+  const labels: Partial<Record<WhatsAppMessageType, string>> = {
+    image: "📷 Foto",
+    audio: "🎤 Áudio",
+    video: "🎥 Vídeo",
+    sticker: "Figurinha",
+    document: "📄 Documento",
+    location: "📍 Localização",
+    contact: "👤 Contato",
+  }
+  const body = quote.body.trim()
+  if (quote.type === "text") return body
+  const label = labels[quote.type] ?? WHATSAPP_MEDIA_PLACEHOLDERS[quote.type]
+  return body ? `${label}: ${body}` : label
+}
+
 /** Image types WhatsApp shows inline when sent as a photo. */
 export const WHATSAPP_SENDABLE_IMAGE_TYPES = [
   "image/jpeg",
@@ -217,6 +249,8 @@ export type WhatsAppMessage = {
   fromMe: boolean
   status: WhatsAppMessageStatus
   media?: WhatsAppMessageMedia
+  /** Set when this message replies to another one. */
+  quoted?: WhatsAppQuote
   /** Where the browser loads the file from; only once it is stored. */
   mediaUrl?: string
   createdAt: Date

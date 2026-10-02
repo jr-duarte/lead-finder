@@ -28,8 +28,8 @@ export async function GET(request: Request, { params }: Context) {
 export async function POST(request: Request, { params }: Context) {
   try {
     const { id } = await params
-    const { text } = sendMessageSchema.parse(await request.json())
-    const message = await whatsappSessionService.sendText(id, text)
+    const { text, replyTo } = sendMessageSchema.parse(await request.json())
+    const message = await whatsappSessionService.sendText(id, text, replyTo)
     return NextResponse.json(message, { status: 201 })
   } catch (error) {
     if (error instanceof WhatsAppActionError) {

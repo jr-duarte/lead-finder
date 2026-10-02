@@ -21,6 +21,7 @@ import type {
   WaMessage,
   WaOutgoingMedia,
   WaOutreachStatus,
+  WaQuote,
   WhatsAppClient,
   WhatsAppClientFactory,
 } from "@/lib/whatsapp/client"
@@ -643,13 +644,34 @@ async function startClient(): Promise<void> {
  */
 async function deliver(
   conversationId: string,
-  send: (client: WhatsAppClient, chatJid: string) => Promise<WaMessage>,
-  options: { awaitMedia?: boolean } = {}
+  send: (
+    client: WhatsAppClient,
+    chatJid: string,
+    quoted: WaQuote | undefined
+  ) => Promise<WaMessage>,
+  options: { awaitMedia?: boolean; replyTo?: string } = {}
 ): Promise<WhatsAppMessage> {
   const conversation =
     await whatsappConversationRepository.findById(conversationId)
   if (!conversation)
     throw new WhatsAppActionError("Conversa não encontrada.", 404)
+
+  let quoted: WaQuote | undefined
+  if (options.replyTo) {
+    const original = await whatsappMessageRepository.findById(options.replyTo)
+    if (!original || original.conversationId !== conversation.id) {
+      throw new WhatsAppActionError(
+        "A mensagem respondida não está nesta conversa.",
+        422
+      )
+    }
+    quoted = {
+      id: original.whatsappMessageId,
+      fromMe: original.fromMe,
+      type: original.type,
+      body: original.body,
+    }
+  }
 
   await refreshStaleClient()
   const client = runtime.client
@@ -662,7 +684,7 @@ async function deliver(
 
   let sent: WaMessage
   try {
-    sent = await send(client, conversation.whatsappChatId)
+    sent = await send(client, conversation.whatsappChatId, quoted)
   } catch (error) {
     console.error("[whatsapp] falha ao enviar mensagem", error)
     throw new WhatsAppActionError(
@@ -887,10 +909,19 @@ export const whatsappSessionService = {
     return this.snapshot()
   },
 
-  /** Sends a text and stores it right away, without waiting for the echo. */
-  sendText(conversationId: string, text: string): Promise<WhatsAppMessage> {
-    return deliver(conversationId, (client, chatJid) =>
-      client.sendText(chatJid, text)
+  /**
+   * Sends a text and stores it right away, without waiting for the echo.
+   * `replyTo` (a stored message id) sends it as a reply to that message.
+   */
+  sendText(
+    conversationId: string,
+    text: string,
+    replyTo?: string
+  ): Promise<WhatsAppMessage> {
+    return deliver(
+      conversationId,
+      (client, chatJid, quoted) => client.sendText(chatJid, text, { quoted }),
+      { replyTo }
     )
   },
 
@@ -900,7 +931,8 @@ export const whatsappSessionService = {
    */
   async sendMedia(
     conversationId: string,
-    media: WaOutgoingMedia
+    media: WaOutgoingMedia,
+    replyTo?: string
   ): Promise<WhatsAppMessage> {
     if (!getMediaStorage()) {
       throw new WhatsAppActionError(
@@ -910,8 +942,8 @@ export const whatsappSessionService = {
     }
     return deliver(
       conversationId,
-      async (client, chatJid) => {
-        const sent = await client.sendMedia(chatJid, media)
+      async (client, chatJid, quoted) => {
+        const sent = await client.sendMedia(chatJid, media, { quoted })
         // The file is already here; no need to fetch it back from WhatsApp.
         return {
           ...sent,
@@ -923,7 +955,7 @@ export const whatsappSessionService = {
           },
         }
       },
-      { awaitMedia: true }
+      { awaitMedia: true, replyTo }
     )
   },
 

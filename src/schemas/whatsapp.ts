@@ -28,7 +28,14 @@ export const messageListSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(30),
 })
 
+/** Id of a stored message, to send as a reply to it. */
+export const replyToSchema = z
+  .string()
+  .refine((value) => Types.ObjectId.isValid(value), "Mensagem inválida")
+  .optional()
+
 export const sendMessageSchema = z.object({
+  replyTo: replyToSchema,
   text: z
     .string()
     .trim()

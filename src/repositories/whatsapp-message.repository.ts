@@ -62,6 +62,14 @@ export function toWhatsAppMessage(raw: RawMessage): WhatsAppMessage {
     status: (raw.status ??
       (raw.fromMe ? "SENT" : "RECEIVED")) as WhatsAppMessageStatus,
     media,
+    quoted: raw.quoted
+      ? {
+          whatsappMessageId: raw.quoted.whatsappMessageId,
+          fromMe: raw.quoted.fromMe,
+          type: (raw.quoted.type ?? "other") as WhatsAppMessageType,
+          body: raw.quoted.body ?? "",
+        }
+      : undefined,
     mediaUrl:
       media?.status === "stored"
         ? whatsappMediaPath(String(raw._id))
@@ -119,6 +127,16 @@ export const whatsappMessageRepository = {
                     status: "pending" as const,
                     seconds: message.media.seconds,
                     voiceNote: message.media.voiceNote,
+                  },
+                }
+              : {}),
+            ...(message.quoted
+              ? {
+                  quoted: {
+                    whatsappMessageId: message.quoted.id,
+                    fromMe: message.quoted.fromMe,
+                    type: message.quoted.type,
+                    body: message.quoted.body,
                   },
                 }
               : {}),
@@ -198,6 +216,31 @@ export const whatsappMessageRepository = {
       limit: 1,
     })
     return message ?? null
+  },
+
+  async findById(id: string): Promise<WhatsAppMessage | null> {
+    await connectToDatabase()
+    if (!Types.ObjectId.isValid(id)) return null
+    const raw = await WhatsAppMessageModel.findById(id)
+      .lean<RawMessage>()
+      .exec()
+    return raw ? toWhatsAppMessage(raw) : null
+  },
+
+  /** Stored messages of one conversation among these WhatsApp ids. */
+  async findManyByWhatsAppIds(
+    conversationId: string,
+    whatsappMessageIds: string[]
+  ): Promise<WhatsAppMessage[]> {
+    await connectToDatabase()
+    if (whatsappMessageIds.length === 0) return []
+    const raw = await WhatsAppMessageModel.find({
+      conversationId,
+      whatsappMessageId: { $in: whatsappMessageIds },
+    })
+      .lean<RawMessage[]>()
+      .exec()
+    return raw.map(toWhatsAppMessage)
   },
 
   async findByWhatsAppId(

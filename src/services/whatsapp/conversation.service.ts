@@ -1,8 +1,10 @@
 import type { PipelineStage } from "@/domain/pipeline"
-import type {
-  WhatsAppContact,
-  WhatsAppConversation,
-  WhatsAppMessage,
+import {
+  quotePreview,
+  WHATSAPP_QUOTE_MAX_LENGTH,
+  type WhatsAppContact,
+  type WhatsAppConversation,
+  type WhatsAppMessage,
 } from "@/domain/whatsapp"
 import { businessRepository } from "@/repositories/business.repository"
 import { whatsappConversationRepository } from "@/repositories/whatsapp-conversation.repository"
@@ -21,6 +23,43 @@ export type ConversationDetail = {
   conversation: WhatsAppConversation
   contact: WhatsAppContact | null
   lead: LeadSummary | null
+}
+
+/**
+ * WhatsApp's copy of a quote may be stale or say little about who wrote it;
+ * when the original is stored, its own author and text are used instead.
+ */
+async function resolveQuotes(
+  conversationId: string,
+  messages: WhatsAppMessage[]
+): Promise<WhatsAppMessage[]> {
+  const ids = [
+    ...new Set(
+      messages.flatMap((message) =>
+        message.quoted ? [message.quoted.whatsappMessageId] : []
+      )
+    ),
+  ]
+  const originals = new Map(
+    (
+      await whatsappMessageRepository.findManyByWhatsAppIds(conversationId, ids)
+    ).map((original) => [original.whatsappMessageId, original])
+  )
+  return messages.map((message) => {
+    const original = message.quoted
+      ? originals.get(message.quoted.whatsappMessageId)
+      : undefined
+    if (!message.quoted || !original) return message
+    return {
+      ...message,
+      quoted: {
+        whatsappMessageId: original.whatsappMessageId,
+        fromMe: original.fromMe,
+        type: original.type,
+        body: original.body.slice(0, WHATSAPP_QUOTE_MAX_LENGTH),
+      },
+    }
+  })
 }
 
 async function leadSummary(businessId?: string): Promise<LeadSummary | null> {
@@ -68,7 +107,7 @@ export const whatsappConversationService = {
       limit: limit + 1,
     })
     const hasMore = page.length > limit
-    const items = hasMore ? page.slice(0, limit) : page
+    const items = await resolveQuotes(id, hasMore ? page.slice(0, limit) : page)
     return {
       items,
       nextCursor: hasMore ? (items[items.length - 1]?.id ?? null) : null,
@@ -113,12 +152,19 @@ export const whatsappConversationService = {
     const detail = await this.detail(id)
     if (!detail) return null
 
-    const messages = await whatsappMessageRepository.recent(id, limit)
-    const name = detail.conversation.title
-    const lines = messages.map(
-      (message) =>
-        `${message.fromMe ? "Você" : name}: ${message.body || `[${message.type}]`}`
+    const messages = await resolveQuotes(
+      id,
+      await whatsappMessageRepository.recent(id, limit)
     )
+    const name = detail.conversation.title
+    const lines = messages.map((message) => {
+      const author = message.fromMe ? "Você" : name
+      // A reply only makes sense next to what it answers.
+      const reply = message.quoted
+        ? ` (respondendo a ${message.quoted.fromMe ? "Você" : name}: "${quotePreview(message.quoted).slice(0, 120)}")`
+        : ""
+      return `${author}${reply}: ${message.body || `[${message.type}]`}`
+    })
     const header = detail.lead
       ? `Lead: ${detail.lead.name}${detail.lead.category ? ` (${detail.lead.category})` : ""}`
       : `Contato: ${name}`

@@ -272,10 +272,16 @@ function useShowSentMessage(conversationId: string) {
 export function useSendMessage(conversationId: string) {
   const showSent = useShowSentMessage(conversationId)
   return useMutation({
-    mutationFn: (text: string) =>
+    /** A plain string, or the text plus the message it replies to. */
+    mutationFn: (input: string | { text: string; replyTo?: string }) =>
       apiFetch<WhatsAppMessageDTO>(
         `/api/whatsapp/conversations/${conversationId}/messages`,
-        { method: "POST", body: JSON.stringify({ text }) }
+        {
+          method: "POST",
+          body: JSON.stringify(
+            typeof input === "string" ? { text: input } : input
+          ),
+        }
       ),
     onSuccess: showSent,
     onError: (error: Error) => {
@@ -291,17 +297,26 @@ export type SendMediaInput = {
   caption?: string
   /** Recorded in the CRM: goes as a voice message. */
   voiceNote?: boolean
+  /** Id of the message this one replies to. */
+  replyTo?: string
 }
 
 /** Sends an image or an audio; the server converts audio for WhatsApp. */
 export function useSendMedia(conversationId: string) {
   const showSent = useShowSentMessage(conversationId)
   return useMutation({
-    mutationFn: ({ file, fileName, caption, voiceNote }: SendMediaInput) => {
+    mutationFn: ({
+      file,
+      fileName,
+      caption,
+      voiceNote,
+      replyTo,
+    }: SendMediaInput) => {
       const form = new FormData()
       form.set("file", file, fileName ?? "arquivo")
       if (caption) form.set("caption", caption)
       if (voiceNote) form.set("voiceNote", "true")
+      if (replyTo) form.set("replyTo", replyTo)
       return apiFetch<WhatsAppMessageDTO>(
         `/api/whatsapp/conversations/${conversationId}/media`,
         { method: "POST", body: form }

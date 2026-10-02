@@ -15,15 +15,17 @@ import {
   type WAMessage,
 } from "baileys"
 
-import type {
-  WhatsAppMessageStatus,
-  WhatsAppMessageType,
+import {
+  WHATSAPP_QUOTE_MAX_LENGTH,
+  type WhatsAppMessageStatus,
+  type WhatsAppMessageType,
 } from "@/domain/whatsapp"
 import type {
   WaChat,
   WaContact,
   WaMedia,
   WaMessage,
+  WaQuote,
 } from "@/lib/whatsapp/client"
 
 /**
@@ -156,6 +158,43 @@ function describeContent(
   }
 }
 
+type ContextInfo = {
+  stanzaId?: string | null
+  participant?: string | null
+  quotedMessage?: WAMessage["message"]
+}
+
+/** The reply metadata every message kind may carry. */
+function contextInfoOf(
+  content: NonNullable<WAMessage["message"]>
+): ContextInfo | undefined {
+  const kind = getContentType(content)
+  if (!kind) return undefined
+  const inner = content[kind] as { contextInfo?: ContextInfo } | undefined
+  return typeof inner === "object" && inner ? inner.contextInfo : undefined
+}
+
+/** What a reply quotes, or undefined when the message is not a reply. */
+export function quoteOf(
+  content: NonNullable<WAMessage["message"]>,
+  meJid?: string
+): WaQuote | undefined {
+  const context = contextInfoOf(content)
+  if (!context?.stanzaId) return undefined
+
+  const quotedContent = normalizeMessageContent(context.quotedMessage)
+  const described = quotedContent ? describeContent(quotedContent) : null
+  const participant = context.participant
+    ? jidNormalizedUser(context.participant)
+    : undefined
+  return {
+    id: context.stanzaId,
+    fromMe: Boolean(meJid && participant === jidNormalizedUser(meJid)),
+    type: described?.type ?? "other",
+    body: (described?.body ?? "").slice(0, WHATSAPP_QUOTE_MAX_LENGTH),
+  }
+}
+
 /** Fetches a message's file; the socket supplies it, tests leave it out. */
 export type MediaDownloader = (message: WAMessage) => Promise<Buffer>
 
@@ -195,6 +234,7 @@ export function normalizeMessage(
     timestamp: seconds > 0 ? new Date(seconds * 1000) : new Date(),
     status: statusFromAck(message.status, fromMe),
     pushName: fromMe ? undefined : (message.pushName ?? undefined),
+    quoted: quoteOf(content, meJid),
     media:
       described.media && download
         ? { ...described.media, download: () => download(message) }

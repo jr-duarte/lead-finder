@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Mic,
   Paperclip,
+  Reply,
   Send,
   Sparkles,
   Trash2,
@@ -27,6 +28,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { MessageMedia } from "@/components/whatsapp/message-media"
+import { MessageQuote } from "@/components/whatsapp/message-quote"
 import {
   formatWhatsAppPhone,
   outgoingMediaKind,
@@ -86,22 +88,46 @@ function StatusIcon({ status }: { status: WhatsAppMessageStatus }) {
   }
 }
 
-function MessageBubble({ message }: { message: WhatsAppMessageDTO }) {
+function MessageBubble({
+  message,
+  contactName,
+  onReply,
+  onJumpTo,
+}: {
+  message: WhatsAppMessageDTO
+  contactName: string
+  onReply?: (message: WhatsAppMessageDTO) => void
+  onJumpTo: (whatsappMessageId: string) => void
+}) {
+  const quoted = message.quoted
   return (
     <div
-      className={cn("flex", message.fromMe ? "justify-end" : "justify-start")}
+      className={cn(
+        "group flex items-center gap-1",
+        message.fromMe ? "flex-row-reverse" : "flex-row"
+      )}
     >
       <div
+        data-wa-id={message.whatsappMessageId}
         className={cn(
-          "max-w-[78%] rounded-lg px-3 py-1.5 text-sm shadow-xs",
+          "max-w-[78%] rounded-lg px-3 py-1.5 text-sm shadow-xs transition-shadow duration-500",
           message.fromMe
             ? "bg-primary text-primary-foreground rounded-br-sm"
             : "bg-muted rounded-bl-sm"
         )}
       >
+        {quoted ? (
+          <MessageQuote
+            quote={quoted}
+            contactName={contactName}
+            onBubble={message.fromMe ? "mine" : "theirs"}
+            onClick={() => onJumpTo(quoted.whatsappMessageId)}
+            className="-mx-1.5 mb-1 w-[calc(100%+0.75rem)]"
+          />
+        ) : null}
         {message.type !== "text" ? <MessageMedia message={message} /> : null}
         {message.body ? (
-          <p className="break-words whitespace-pre-wrap">{message.body}</p>
+          <p className="wrap-break-word whitespace-pre-wrap">{message.body}</p>
         ) : null}
         <div
           className={cn(
@@ -117,6 +143,18 @@ function MessageBubble({ message }: { message: WhatsAppMessageDTO }) {
           ) : null}
         </div>
       </div>
+      {onReply ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground size-7 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          onClick={() => onReply(message)}
+          aria-label="Responder"
+          title="Responder"
+        >
+          <Reply className="size-4" />
+        </Button>
+      ) : null}
     </div>
   )
 }
@@ -137,10 +175,17 @@ function Composer({
   conversationId,
   online,
   initialDraft = "",
+  replyTo,
+  contactName,
+  onClearReply,
 }: {
   conversationId: string
   online: boolean
   initialDraft?: string
+  /** The message being answered, shown above the box until sent. */
+  replyTo: WhatsAppMessageDTO | null
+  contactName: string
+  onClearReply: () => void
 }) {
   const send = useSendMessage(conversationId)
   const sendMedia = useSendMedia(conversationId)
@@ -159,6 +204,12 @@ function Composer({
 
   const hasDraft = draft.trim().length > 0
   const busy = send.isPending || sendMedia.isPending || suggest.isPending
+  const replyToId = replyTo?.id
+
+  // Choosing a message to answer puts the cursor where the answer goes.
+  React.useEffect(() => {
+    if (replyToId) textarea.current?.focus()
+  }, [replyToId])
 
   // Object URLs hold the file in memory until revoked.
   React.useEffect(
@@ -195,12 +246,15 @@ function Composer({
         file: attachment.file,
         fileName: attachment.file.name,
         caption,
+        replyTo: replyToId,
       })
       setAttachment(null)
+      onClearReply()
       if (attachment.kind === "audio" && text) await send.mutateAsync(text)
     } else {
       if (!text) return
-      await send.mutateAsync(text)
+      await send.mutateAsync({ text, replyTo: replyToId })
+      onClearReply()
     }
     setDraft("")
     setRationale(null)
@@ -223,7 +277,9 @@ function Composer({
       file: recording.blob,
       fileName: "voz",
       voiceNote: true,
+      replyTo: replyToId,
     })
+    onClearReply()
   }
 
   // With text in the box it polishes the draft; empty, it writes one.
@@ -253,6 +309,25 @@ function Composer({
           >
             <X className="size-3.5" />
           </button>
+        </div>
+      ) : null}
+
+      {replyTo ? (
+        <div className="flex items-center gap-2">
+          <Reply className="text-muted-foreground size-4 shrink-0" />
+          <MessageQuote
+            quote={replyTo}
+            contactName={contactName}
+            className="bg-muted flex-1"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClearReply}
+            aria-label="Cancelar resposta"
+          >
+            <X className="size-4" />
+          </Button>
         </div>
       ) : null}
 
@@ -344,6 +419,7 @@ function Composer({
                 event.preventDefault()
                 void submit()
               }
+              if (event.key === "Escape" && replyTo) onClearReply()
             }}
             onPaste={(event) => {
               // A screenshot pasted into the box becomes an attachment.
@@ -440,6 +516,19 @@ export function ChatPanel({
   const messages = useMessages(conversationId)
   const markRead = useMarkConversationRead()
   const sentinel = React.useRef<HTMLDivElement>(null)
+  const scroller = React.useRef<HTMLDivElement>(null)
+  // Tied to its conversation, so switching chats never keeps a stale reply.
+  const [reply, setReply] = React.useState<{
+    conversationId: string
+    message: WhatsAppMessageDTO
+  } | null>(null)
+  const replyTo =
+    reply?.conversationId === conversationId ? reply.message : null
+  const clearReply = React.useCallback(() => setReply(null), [])
+  const startReply = React.useCallback(
+    (message: WhatsAppMessageDTO) => setReply({ conversationId, message }),
+    [conversationId]
+  )
 
   const unread = detail.data?.conversation.unreadCount ?? 0
   const { mutate: markAsRead } = markRead
@@ -461,12 +550,39 @@ export function ChatPanel({
     return () => observer.disconnect()
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
+  const contactName = detail.data?.conversation.title ?? "Contato"
+
+  /** Scrolls to a quoted message and flashes it, like WhatsApp does. */
+  const jumpTo = (whatsappMessageId: string) => {
+    const target = scroller.current?.querySelector<HTMLElement>(
+      `[data-wa-id="${CSS.escape(whatsappMessageId)}"]`
+    )
+    if (!target) {
+      toast.info("Mensagem original não carregada", {
+        description:
+          "Role a conversa para cima para carregar mensagens mais antigas.",
+      })
+      return
+    }
+    target.scrollIntoView({ behavior: "smooth", block: "center" })
+    target.classList.add("ring-2", "ring-amber-400")
+    setTimeout(() => target.classList.remove("ring-2", "ring-amber-400"), 1500)
+  }
+
   // Newest first, as the API returns them; the column-reverse container
   // shows them bottom-up and keeps the scroll pinned to the latest message.
   const items = messages.data?.pages.flatMap((page) => page.items) ?? []
   const rows: React.ReactNode[] = []
   items.forEach((message, index) => {
-    rows.push(<MessageBubble key={message.id} message={message} />)
+    rows.push(
+      <MessageBubble
+        key={message.id}
+        message={message}
+        contactName={contactName}
+        onReply={online ? startReply : undefined}
+        onJumpTo={jumpTo}
+      />
+    )
     const older = items[index + 1]
     if (!older || dayKey(older.timestamp) !== dayKey(message.timestamp)) {
       rows.push(
@@ -498,7 +614,10 @@ export function ChatPanel({
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col-reverse gap-1.5 overflow-y-auto p-4">
+      <div
+        ref={scroller}
+        className="flex min-h-0 flex-1 flex-col-reverse gap-1.5 overflow-y-auto p-4"
+      >
         {messages.isError ? (
           <ErrorState error={messages.error} />
         ) : messages.isPending ? (
@@ -532,6 +651,9 @@ export function ChatPanel({
         conversationId={conversationId}
         online={online}
         initialDraft={initialDraft}
+        replyTo={replyTo}
+        contactName={contactName}
+        onClearReply={clearReply}
       />
     </div>
   )
