@@ -101,6 +101,22 @@ dedicado para isolá-las.
 - Vínculo automático com o lead quando um único lead tem o mesmo telefone;
   vínculo manual para os demais
 
+### Campanhas de prospecção
+
+- Primeiro contato pelo WhatsApp com leads novos, a partir da tabela de
+  Empresas ou da página do lead
+- Só entram leads nunca contatados: fora do funil ou em "Novo", sem conversa
+  no WhatsApp e fora de outra campanha aberta
+- O Claude escreve a abordagem de cada lead (reaproveita a que já existir); o
+  número é verificado no WhatsApp e você aprova tudo com um clique, editando o
+  que quiser antes
+- Envio um por vez, com intervalo configurável e variação automática, só nos
+  dias e horários escolhidos
+- Proteções da conta: limite diário somando todas as campanhas, pausa
+  automática se o WhatsApp restringir novos contatos ou após 3 falhas
+  seguidas, e nenhum lead recebe a mesma mensagem duas vezes
+- A fila só anda com o CRM aberto e retoma sem rajada depois de fechado
+
 ---
 
 ## Stack
@@ -225,24 +241,27 @@ Japonês e Churrascaria no mesmo bairro, chega-se a 200+ leads únicos.
 
 Copie `.env.example` para `.env.local` e ajuste.
 
-| Variável                          | Padrão                                  | Descrição                                                                  |
-| --------------------------------- | --------------------------------------- | -------------------------------------------------------------------------- |
-| `MONGODB_URI`                     | `mongodb://127.0.0.1:27017/lead-finder` | Conexão do MongoDB.                                                        |
-| `PLACES_SOURCE`                   | `mock`                                  | `mock`, `osm` ou `google`.                                                 |
-| `GOOGLE_MAPS_API_KEY`             | —                                       | Obrigatória quando a fonte é `google`.                                     |
-| `GOOGLE_PLACES_ENDPOINT`          | endpoint oficial                        | Raramente precisa mudar.                                                   |
-| `OVERPASS_ENDPOINT`               | endpoint público                        | Usado pela fonte `osm`.                                                    |
-| `CRAWLER_CONCURRENCY`             | `2`                                     | Sites acessados em paralelo no enriquecimento.                             |
-| `CRAWLER_REQUEST_DELAY_MS`        | `1200`                                  | Intervalo mínimo entre requisições.                                        |
-| `CRAWLER_TIMEOUT_MS`              | `15000`                                 | Tempo limite por requisição.                                               |
-| `CRAWLER_MAX_CONTACT_PAGES`       | `2`                                     | Páginas de contato visitadas quando a home não traz e-mail (`0` desativa). |
-| `CRAWLER_USER_AGENT`              | `LeadFinder/1.0 …`                      | Identificação do crawler.                                                  |
-| `WHATSAPP_ENABLED`                | `true`                                  | Liga a caixa de entrada do WhatsApp.                                       |
-| `WHATSAPP_SESSION_NAME`           | `lead-finder`                           | Nome da sessão (subpasta da sessão).                                       |
-| `WHATSAPP_SESSION_DIR`            | `.whatsapp-session`                     | Pasta das credenciais da sessão. **Nunca versione.**                       |
-| `WHATSAPP_INITIAL_SYNC_DAYS`      | `7`                                     | Dias de histórico importados na primeira conexão.                          |
-| `WHATSAPP_SYNC_SAFETY_WINDOW_MIN` | `1440`                                  | Sobreposição com a sincronização anterior, em minutos.                     |
-| `WHATSAPP_INCLUDE_GROUPS`         | `false`                                 | Importa também conversas de grupo.                                         |
+| Variável                                 | Padrão                                  | Descrição                                                                  |
+| ---------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------- |
+| `MONGODB_URI`                            | `mongodb://127.0.0.1:27017/lead-finder` | Conexão do MongoDB.                                                        |
+| `PLACES_SOURCE`                          | `mock`                                  | `mock`, `osm` ou `google`.                                                 |
+| `GOOGLE_MAPS_API_KEY`                    | —                                       | Obrigatória quando a fonte é `google`.                                     |
+| `GOOGLE_PLACES_ENDPOINT`                 | endpoint oficial                        | Raramente precisa mudar.                                                   |
+| `OVERPASS_ENDPOINT`                      | endpoint público                        | Usado pela fonte `osm`.                                                    |
+| `CRAWLER_CONCURRENCY`                    | `2`                                     | Sites acessados em paralelo no enriquecimento.                             |
+| `CRAWLER_REQUEST_DELAY_MS`               | `1200`                                  | Intervalo mínimo entre requisições.                                        |
+| `CRAWLER_TIMEOUT_MS`                     | `15000`                                 | Tempo limite por requisição.                                               |
+| `CRAWLER_MAX_CONTACT_PAGES`              | `2`                                     | Páginas de contato visitadas quando a home não traz e-mail (`0` desativa). |
+| `CRAWLER_USER_AGENT`                     | `LeadFinder/1.0 …`                      | Identificação do crawler.                                                  |
+| `WHATSAPP_ENABLED`                       | `true`                                  | Liga a caixa de entrada do WhatsApp.                                       |
+| `WHATSAPP_SESSION_NAME`                  | `lead-finder`                           | Nome da sessão (subpasta da sessão).                                       |
+| `WHATSAPP_SESSION_DIR`                   | `.whatsapp-session`                     | Pasta das credenciais da sessão. **Nunca versione.**                       |
+| `WHATSAPP_INITIAL_SYNC_DAYS`             | `7`                                     | Dias de histórico importados na primeira conexão.                          |
+| `WHATSAPP_SYNC_SAFETY_WINDOW_MIN`        | `1440`                                  | Sobreposição com a sincronização anterior, em minutos.                     |
+| `WHATSAPP_INCLUDE_GROUPS`                | `false`                                 | Importa também conversas de grupo.                                         |
+| `WHATSAPP_CAMPAIGN_DAILY_LIMIT`          | `5`                                     | Primeiros contatos por dia, somando todas as campanhas.                    |
+| `WHATSAPP_CAMPAIGN_DEFAULT_INTERVAL_MIN` | `10`                                    | Intervalo padrão entre envios de uma campanha, em minutos.                 |
+| `WHATSAPP_CAMPAIGN_JITTER_PERCENT`       | `30`                                    | Variação aplicada a cada intervalo (±%).                                   |
 
 > **Nunca versione o `.env.local`.** Ele está no `.gitignore`, junto com
 > variantes como `.env*.bak`.

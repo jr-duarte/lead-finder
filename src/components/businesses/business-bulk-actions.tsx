@@ -1,7 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { Download, KanbanSquare, Sparkles, Trash2, X } from "lucide-react"
+import {
+  Download,
+  KanbanSquare,
+  Megaphone,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react"
 
 import {
   AlertDialog,
@@ -23,6 +30,7 @@ export function BusinessBulkActions({
   onClear,
   onEnrich,
   onAddToPipeline,
+  onAddToCampaign,
   onExport,
   onDelete,
   isEnriching,
@@ -32,6 +40,7 @@ export function BusinessBulkActions({
   onClear: () => void
   onEnrich: () => void
   onAddToPipeline: () => void
+  onAddToCampaign: () => void
   onExport: () => void
   onDelete: () => void
   isEnriching?: boolean
@@ -58,6 +67,11 @@ export function BusinessBulkActions({
         <Button size="sm" variant="outline" onClick={onAddToPipeline}>
           <KanbanSquare className="size-4" />
           Enviar para o funil
+        </Button>
+
+        <Button size="sm" variant="outline" onClick={onAddToCampaign}>
+          <Megaphone className="size-4" />
+          Adicionar a campanha
         </Button>
 
         <Button size="sm" variant="outline" onClick={onExport}>

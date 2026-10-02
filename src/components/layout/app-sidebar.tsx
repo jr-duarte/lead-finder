@@ -6,6 +6,7 @@ import {
   Building2,
   KanbanSquare,
   LayoutDashboard,
+  Megaphone,
   MessageCircle,
   Search,
   Settings,
@@ -42,6 +43,7 @@ const LEADS: NavItem[] = [
   { title: "Enriquecimento", href: "/enrichment", icon: Sparkles },
   { title: "Funil", href: "/pipeline", icon: KanbanSquare },
   { title: "WhatsApp", href: "/whatsapp", icon: MessageCircle },
+  { title: "Campanhas", href: "/campaigns", icon: Megaphone },
 ]
 
 const SYSTEM: NavItem[] = [

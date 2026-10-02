@@ -13,13 +13,9 @@ import {
 } from "vitest"
 
 import { startTestDatabase } from "../helpers/db"
+import { FakeWhatsAppClient } from "../helpers/fake-whatsapp"
 
-import type {
-  WaBatch,
-  WaClientHandlers,
-  WaMessage,
-  WhatsAppClient,
-} from "@/lib/whatsapp/client"
+import type { WaBatch, WaMessage } from "@/lib/whatsapp/client"
 import { BusinessModel } from "@/models/business.model"
 import { NoteModel } from "@/models/note.model"
 import { WhatsAppContactModel } from "@/models/whatsapp-contact.model"
@@ -35,52 +31,6 @@ import {
 } from "@/services/whatsapp/session.service"
 
 const JOAO = "5511999998888@s.whatsapp.net"
-
-/** Stands in for Baileys: tests drive the events by hand. */
-class FakeWhatsAppClient implements WhatsAppClient {
-  handlers: WaClientHandlers | null = null
-  starts = 0
-  sent: { chatJid: string; text: string }[] = []
-  loggedOut = false
-  /** Numbers that "have WhatsApp", mapped to the jid WhatsApp answers with. */
-  registered = new Map<string, string>()
-  private counter = 0
-
-  async checkNumber(phone: string) {
-    return this.registered.get(phone) ?? null
-  }
-
-  async start(handlers: WaClientHandlers) {
-    this.handlers = handlers
-    this.starts += 1
-  }
-
-  async sendText(chatJid: string, text: string): Promise<WaMessage> {
-    this.sent.push({ chatJid, text })
-    return {
-      id: `sent-${(this.counter += 1)}`,
-      chatJid,
-      fromMe: true,
-      from: "5511000000000@s.whatsapp.net",
-      to: chatJid,
-      body: text,
-      type: "text",
-      timestamp: new Date(),
-      status: "SENT",
-    }
-  }
-
-  async logout() {
-    this.loggedOut = true
-  }
-
-  async stop() {}
-
-  get on(): WaClientHandlers {
-    if (!this.handlers) throw new Error("client not started")
-    return this.handlers
-  }
-}
 
 function incoming(id: string, body: string, at: string): WaMessage {
   return {

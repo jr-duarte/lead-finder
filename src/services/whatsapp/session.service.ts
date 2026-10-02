@@ -17,10 +17,12 @@ import type {
   WaBatchSource,
   WaClientHandlers,
   WaCloseReason,
+  WaOutreachStatus,
   WhatsAppClient,
   WhatsAppClientFactory,
 } from "@/lib/whatsapp/client"
 import { businessRepository } from "@/repositories/business.repository"
+import { campaignRepository } from "@/repositories/campaign.repository"
 import { whatsappConversationRepository } from "@/repositories/whatsapp-conversation.repository"
 import { whatsappMessageRepository } from "@/repositories/whatsapp-message.repository"
 import { whatsappSessionRepository } from "@/repositories/whatsapp-session.repository"
@@ -87,7 +89,7 @@ type Runtime = {
  * dev hot reloads, so without this a client built by older code (missing a
  * new method) would stay in use until the server restarts.
  */
-const CLIENT_API_VERSION = 2
+const CLIENT_API_VERSION = 3
 
 // Shared across hot reloads and across the instrumentation/route bundles, so
 // there is never more than one socket for the session.
@@ -374,12 +376,25 @@ function abortSync(reason: string) {
   log(`sincronização interrompida: ${reason}`)
 }
 
+/** A lead that answers counts as a reply on its campaign. */
+async function markCampaignReplies(conversationIds: string[]): Promise<void> {
+  const businessIds = new Set<string>()
+  for (const id of conversationIds) {
+    const conversation = await whatsappConversationRepository.findById(id)
+    if (conversation?.businessId) businessIds.add(conversation.businessId)
+  }
+  if (businessIds.size > 0) {
+    await campaignRepository.markReplied([...businessIds])
+  }
+}
+
 /**
  * Moves linked leads along the board after new messages. A failure here is
  * logged and never undoes the messages already stored.
  */
 async function applyPipelineAutomation(result: IngestResult): Promise<void> {
   try {
+    await markCampaignReplies(result.repliedConversationIds)
     const changes = await advanceLeadStages(result)
     for (const change of changes) {
       log(
@@ -647,6 +662,27 @@ void refreshStaleClient().catch((error) =>
   console.error("[whatsapp] falha ao atualizar o cliente", error)
 )
 
+/** The first of a lead's numbers that has a WhatsApp account. */
+async function findWhatsAppJid(
+  client: WhatsAppClient,
+  candidates: string[]
+): Promise<string | null> {
+  for (const phone of candidates) {
+    let jid: string | null
+    try {
+      jid = await client.checkNumber(phone)
+    } catch (error) {
+      console.error("[whatsapp] falha ao verificar número", error)
+      throw new WhatsAppActionError(
+        "Não foi possível verificar o número no WhatsApp. Tente novamente.",
+        502
+      )
+    }
+    if (jid) return jid
+  }
+  return null
+}
+
 export type WhatsAppSnapshot = {
   enabled: boolean
   status: WhatsAppStatus
@@ -817,6 +853,42 @@ export const whatsappSessionService = {
     return stored
   },
 
+  /** Connected and able to send right now. */
+  isOnline(): boolean {
+    return runtime.client !== null && isWhatsAppOnline(runtime.status)
+  },
+
+  /**
+   * Checks a lead's numbers with WhatsApp without opening a conversation.
+   * "offline" when it cannot be checked now; null when no number has WhatsApp.
+   */
+  async verifyLeadNumber(
+    businessId: string
+  ): Promise<string | null | "offline"> {
+    const business = await businessRepository.findById(businessId)
+    if (!business) return null
+    const candidates = leadWhatsAppCandidates(business)
+    if (candidates.length === 0) return null
+
+    await refreshStaleClient()
+    const client = runtime.client
+    if (!client || !isWhatsAppOnline(runtime.status)) return "offline"
+    return findWhatsAppJid(client, candidates)
+  },
+
+  /** Whether WhatsApp is limiting new chats; null when offline or unknown. */
+  async outreachStatus(): Promise<WaOutreachStatus | null> {
+    await refreshStaleClient()
+    const client = runtime.client
+    if (!client || !isWhatsAppOnline(runtime.status)) return null
+    try {
+      return await client.outreachStatus()
+    } catch (error) {
+      console.error("[whatsapp] falha ao consultar limites da conta", error)
+      return null
+    }
+  },
+
   /**
    * Opens (or reuses) the conversation with a lead, so the first message can
    * be sent from the CRM. Each of the lead's numbers is checked with WhatsApp
@@ -847,19 +919,7 @@ export const whatsappSessionService = {
       )
     }
 
-    let jid: string | null = null
-    for (const phone of candidates) {
-      try {
-        jid = await client.checkNumber(phone)
-      } catch (error) {
-        console.error("[whatsapp] falha ao verificar número", error)
-        throw new WhatsAppActionError(
-          "Não foi possível verificar o número no WhatsApp. Tente novamente.",
-          502
-        )
-      }
-      if (jid) break
-    }
+    const jid = await findWhatsAppJid(client, candidates)
     if (!jid) {
       throw new WhatsAppActionError(
         "Nenhum telefone deste lead tem WhatsApp.",

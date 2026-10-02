@@ -80,6 +80,14 @@ export type WaClientHandlers = {
   onLidMapping: (mapping: { lid: string; pnJid: string }) => void
 }
 
+export type WaOutreachStatus = {
+  /** New chats are blocked for now (error 463 territory). */
+  restricted: boolean
+  restrictedUntil?: Date
+  /** New chats still allowed in the current quota cycle. */
+  newChatsRemaining?: number
+}
+
 export interface WhatsAppClient {
   start(handlers: WaClientHandlers): Promise<void>
   sendText(chatJid: string, text: string): Promise<WaMessage>
@@ -89,6 +97,11 @@ export interface WhatsAppClient {
    * Brazilian accounts without the ninth digit. Null when it has none.
    */
   checkNumber(phone: string): Promise<string | null>
+  /**
+   * Whether WhatsApp is limiting this account's outreach to new contacts.
+   * Fields are absent when WhatsApp does not say.
+   */
+  outreachStatus(): Promise<WaOutreachStatus>
   /** Unlinks the device on the phone and drops the local credentials. */
   logout(): Promise<void>
   /** Closes the socket but keeps the session for the next start. */

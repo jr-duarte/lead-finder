@@ -12,6 +12,7 @@ import {
   Mail,
   MapPin,
   KanbanSquare,
+  Megaphone,
   Pencil,
   Phone,
   Share2,
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/tooltip"
 import { LeadApproachPanel } from "@/components/approach/lead-approach-panel"
 import { BusinessEditDialog } from "@/components/businesses/business-edit-dialog"
+import { AddToCampaignDialog } from "@/components/campaigns/add-to-campaign-dialog"
 import { BusinessStatusBadge } from "@/components/businesses/business-status-badge"
 import { ErrorState } from "@/components/common/error-state"
 import { BusinessNotes } from "@/components/notes/business-notes"
@@ -79,6 +81,7 @@ export function BusinessDetailView({ id }: { id: string }) {
   const addToPipeline = useAddToPipeline()
   const changeStage = useChangeStage(id)
   const [isEditing, setIsEditing] = React.useState(false)
+  const [isAddingToCampaign, setIsAddingToCampaign] = React.useState(false)
 
   if (isError) {
     return (
@@ -205,6 +208,14 @@ export function BusinessDetailView({ id }: { id: string }) {
                 Adicionar ao funil
               </Button>
             )}
+
+            <Button
+              variant="outline"
+              onClick={() => setIsAddingToCampaign(true)}
+            >
+              <Megaphone className="size-4" />
+              Adicionar à campanha
+            </Button>
 
             <Button variant="outline" onClick={() => setIsEditing(true)}>
               <Pencil className="size-4" />
@@ -789,6 +800,12 @@ export function BusinessDetailView({ id }: { id: string }) {
         business={business}
         open={isEditing}
         onOpenChange={setIsEditing}
+      />
+
+      <AddToCampaignDialog
+        open={isAddingToCampaign}
+        onOpenChange={setIsAddingToCampaign}
+        businessIds={[business.id]}
       />
     </div>
   )

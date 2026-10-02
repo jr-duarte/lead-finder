@@ -265,6 +265,26 @@ export function createBaileysClient(
       return result?.exists && result.jid ? jidNormalizedUser(result.jid) : null
     },
 
+    async outreachStatus() {
+      if (!socket) throw new Error("WhatsApp não está conectado.")
+      // Each query may fail on accounts where WhatsApp does not expose it;
+      // unknown is treated as "no limit reported".
+      const [lock, cap] = await Promise.all([
+        socket.fetchAccountReachoutTimelock().catch(() => null),
+        socket.fetchNewChatMessageCap().catch(() => null),
+      ])
+      const total = cap?.total_quota
+      const used = cap?.used_quota
+      return {
+        restricted: Boolean(lock?.isActive),
+        restrictedUntil: lock?.timeEnforcementEnds ?? undefined,
+        newChatsRemaining:
+          typeof total === "number" && typeof used === "number"
+            ? Math.max(0, total - used)
+            : undefined,
+      }
+    },
+
     async logout() {
       const current = socket
       socket = null

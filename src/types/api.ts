@@ -121,3 +121,26 @@ export type WhatsAppMessagesPageDTO = {
   /** Pass as `before` to load the next, older page; null at the start. */
   nextCursor: string | null
 }
+
+export type CampaignDTO = Serialized<import("@/domain/campaign").Campaign>
+export type CampaignItemDTO = Serialized<
+  import("@/domain/campaign").CampaignItem
+>
+export type CampaignDetailDTO = {
+  campaign: CampaignDTO
+  items: CampaignItemDTO[]
+  /** First contacts per day allowed for the whole account. */
+  dailyLimit: number
+}
+export type CampaignLeadCheckDTO = {
+  businessId: string
+  name: string
+  reason: string | null
+}
+export type AddLeadsResultDTO = {
+  added: number
+  rejected: CampaignLeadCheckDTO[]
+}
+export type CampaignCreateResultDTO = AddLeadsResultDTO & {
+  campaign: CampaignDTO
+}

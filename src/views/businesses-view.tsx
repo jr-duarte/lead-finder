@@ -7,6 +7,7 @@ import { Plus, Search } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { BusinessBulkActions } from "@/components/businesses/business-bulk-actions"
+import { AddToCampaignDialog } from "@/components/campaigns/add-to-campaign-dialog"
 import { BusinessCreateDialog } from "@/components/businesses/business-create-dialog"
 import { BusinessEditDialog } from "@/components/businesses/business-edit-dialog"
 import { BusinessTable } from "@/components/businesses/business-table"
@@ -43,6 +44,7 @@ export function BusinessesView() {
   const [selection, setSelection] = React.useState<string[]>([])
   const [editing, setEditing] = React.useState<BusinessDTO | null>(null)
   const [isCreating, setIsCreating] = React.useState(false)
+  const [isAddingToCampaign, setIsAddingToCampaign] = React.useState(false)
   const addToPipeline = useAddToPipeline()
 
   const items = React.useMemo(
@@ -149,6 +151,7 @@ export function BusinessesView() {
           await addToPipeline.mutateAsync({ ids: selectedIds })
           setSelection([])
         }}
+        onAddToCampaign={() => setIsAddingToCampaign(true)}
         onExport={() => exportBusinessesCsv(queryInput)}
         onDelete={handleBulkDelete}
         isEnriching={enrich.isPending}
@@ -207,6 +210,13 @@ export function BusinessesView() {
       )}
 
       <BusinessCreateDialog open={isCreating} onOpenChange={setIsCreating} />
+
+      <AddToCampaignDialog
+        open={isAddingToCampaign}
+        onOpenChange={setIsAddingToCampaign}
+        businessIds={selectedIds}
+        onDone={() => setSelection([])}
+      />
 
       <BusinessEditDialog
         business={editing}

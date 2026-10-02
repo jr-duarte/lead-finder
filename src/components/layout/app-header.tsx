@@ -22,6 +22,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   enrichment: "Enriquecimento",
   pipeline: "Funil",
   whatsapp: "WhatsApp",
+  campaigns: "Campanhas",
   settings: "Configurações",
   new: "Nova",
 }

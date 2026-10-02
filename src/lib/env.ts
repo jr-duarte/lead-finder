@@ -40,6 +40,26 @@ const envSchema = z.object({
   /** Overlap with the previous sync, so clock skew never opens a gap. */
   WHATSAPP_SYNC_SAFETY_WINDOW_MIN: z.coerce.number().int().min(0).default(1440),
   WHATSAPP_INCLUDE_GROUPS: z.stringbool().default(false),
+  /** First contacts sent by campaigns per day, across the whole account. */
+  WHATSAPP_CAMPAIGN_DAILY_LIMIT: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .default(5),
+  WHATSAPP_CAMPAIGN_DEFAULT_INTERVAL_MIN: z.coerce
+    .number()
+    .int()
+    .min(2)
+    .max(24 * 60)
+    .default(10),
+  /** How much each interval varies (±%), so sends never look robotic. */
+  WHATSAPP_CAMPAIGN_JITTER_PERCENT: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(90)
+    .default(30),
 })
 
 export type Env = z.infer<typeof envSchema>
