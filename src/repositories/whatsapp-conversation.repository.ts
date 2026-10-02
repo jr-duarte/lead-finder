@@ -19,6 +19,7 @@ import {
   WhatsAppConversationModel,
   type WhatsAppConversationDocument,
 } from "@/models/whatsapp-conversation.model"
+import { WhatsAppDeletedChatModel } from "@/models/whatsapp-deleted-chat.model"
 import { whatsappMessageRepository } from "@/repositories/whatsapp-message.repository"
 
 type RawContact = WhatsAppContactDocument & {
@@ -383,6 +384,41 @@ export const whatsappConversationRepository = {
    * the LID moves to the phone-number jid, merging into an existing
    * conversation when there is one, so one person never shows up twice.
    */
+  /** Removes the conversation document only; messages go separately. */
+  async deleteById(id: string): Promise<boolean> {
+    await connectToDatabase()
+    if (!Types.ObjectId.isValid(id)) return false
+    const result = await WhatsAppConversationModel.deleteOne({ _id: id }).exec()
+    return result.deletedCount > 0
+  },
+
+  /** Remembers that these chats were deleted now (see the model). */
+  async markChatsDeleted(chatJids: string[], deletedAt: Date): Promise<void> {
+    await connectToDatabase()
+    if (chatJids.length === 0) return
+    await WhatsAppDeletedChatModel.bulkWrite(
+      chatJids.map((chatJid) => ({
+        updateOne: {
+          filter: { chatJid },
+          update: { $set: { chatJid, deletedAt } },
+          upsert: true,
+        },
+      }))
+    )
+  },
+
+  /** When each of these chats was last deleted, for those that were. */
+  async deletedChatTimes(chatJids: string[]): Promise<Map<string, Date>> {
+    await connectToDatabase()
+    if (chatJids.length === 0) return new Map()
+    const rows = await WhatsAppDeletedChatModel.find({
+      chatJid: { $in: chatJids },
+    })
+      .lean<{ chatJid: string; deletedAt: Date }[]>()
+      .exec()
+    return new Map(rows.map((row) => [row.chatJid, row.deletedAt]))
+  },
+
   /**
    * Deletes conversations opened under a LID that never got a message and
    * belong to no lead: leftovers of chat events for people whose messages

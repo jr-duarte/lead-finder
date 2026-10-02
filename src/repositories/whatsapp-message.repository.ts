@@ -330,6 +330,31 @@ export const whatsappMessageRepository = {
       : null
   },
 
+  /** Storage keys of every stored file in a conversation. */
+  async storedMediaKeys(conversationId: string): Promise<string[]> {
+    await connectToDatabase()
+    if (!Types.ObjectId.isValid(conversationId)) return []
+    const raw = await WhatsAppMessageModel.find({
+      conversationId,
+      "media.storageKey": { $exists: true },
+    })
+      .select("media.storageKey")
+      .lean<RawMessage[]>()
+      .exec()
+    return raw.flatMap((item) =>
+      item.media?.storageKey ? [item.media.storageKey] : []
+    )
+  },
+
+  async deleteByConversation(conversationId: string): Promise<number> {
+    await connectToDatabase()
+    if (!Types.ObjectId.isValid(conversationId)) return 0
+    const result = await WhatsAppMessageModel.deleteMany({
+      conversationId,
+    }).exec()
+    return result.deletedCount
+  },
+
   /** Which of these conversations have at least one stored message. */
   async conversationsWithMessages(
     conversationIds: string[]

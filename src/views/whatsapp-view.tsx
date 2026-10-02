@@ -168,6 +168,7 @@ export function WhatsAppView() {
               conversationId={selectedId}
               online={online}
               initialDraft={draftParam ?? undefined}
+              onDeleted={() => select(null)}
             />
           </div>
         ) : (

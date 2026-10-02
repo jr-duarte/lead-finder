@@ -979,6 +979,65 @@ export const whatsappSessionService = {
     )
   },
 
+  /**
+   * Deletes a conversation from the CRM: its messages and stored files go,
+   * the contact and the lead stay. Nothing changes on the phone. Later syncs
+   * skip what was deleted; a new message brings the chat back.
+   */
+  async deleteConversation(conversationId: string): Promise<boolean> {
+    const result = await enqueue(async () => {
+      const conversation =
+        await whatsappConversationRepository.findById(conversationId)
+      if (!conversation) return null
+
+      const contact = await whatsappConversationRepository.findContactById(
+        conversation.contactId
+      )
+      const mediaKeys =
+        await whatsappMessageRepository.storedMediaKeys(conversationId)
+      // The mark goes first: a sync landing mid-way cannot revive the chat.
+      await whatsappConversationRepository.markChatsDeleted(
+        [
+          ...new Set(
+            [conversation.whatsappChatId, contact?.lid].filter(
+              (jid): jid is string => Boolean(jid)
+            )
+          ),
+        ],
+        new Date()
+      )
+      const messages =
+        await whatsappMessageRepository.deleteByConversation(conversationId)
+      await whatsappConversationRepository.deleteById(conversationId)
+      await campaignRepository.clearConversation(conversationId)
+      return { messages, mediaKeys, title: conversation.title }
+    })
+    if (!result) return false
+
+    log(
+      `conversa "${result.title}" excluída (${result.messages} mensagens, ${result.mediaKeys.length} arquivos)`
+    )
+    emitWhatsAppEvent({
+      type: "conversations",
+      conversationIds: [conversationId],
+    })
+
+    // Files are cleaned up last: a failure here leaves orphans in the
+    // bucket, never a half-deleted conversation.
+    const storage = getMediaStorage()
+    if (storage && result.mediaKeys.length > 0) {
+      await storage
+        .remove(result.mediaKeys)
+        .catch((error) =>
+          console.error(
+            "[whatsapp] conversa excluída, mas os arquivos ficaram no S3 (falta a permissão s3:DeleteObject?)",
+            error
+          )
+        )
+    }
+    return true
+  },
+
   /** Connected and able to send right now. */
   isOnline(): boolean {
     return runtime.client !== null && isWhatsAppOnline(runtime.status)

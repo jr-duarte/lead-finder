@@ -24,6 +24,7 @@ import {
   type MediaStorage,
 } from "@/lib/storage/media-storage"
 import { WhatsAppContactModel } from "@/models/whatsapp-contact.model"
+import { WhatsAppDeletedChatModel } from "@/models/whatsapp-deleted-chat.model"
 import { WhatsAppConversationModel } from "@/models/whatsapp-conversation.model"
 import { WhatsAppMessageModel } from "@/models/whatsapp-message.model"
 import { WhatsAppSessionModel } from "@/models/whatsapp-session.model"
@@ -53,6 +54,9 @@ class MemoryStorage implements MediaStorage {
   }
   async signedUrl(key: string) {
     return `https://bucket.test/${key}?signed`
+  }
+  async remove(keys: string[]) {
+    for (const key of keys) this.objects.delete(key)
   }
 }
 
@@ -130,6 +134,7 @@ afterEach(async () => {
     WhatsAppContactModel.deleteMany({}),
     WhatsAppConversationModel.deleteMany({}),
     WhatsAppMessageModel.deleteMany({}),
+    WhatsAppDeletedChatModel.deleteMany({}),
   ])
 })
 
@@ -353,5 +358,68 @@ describe("preparar arquivo para envio", () => {
       voiceNote: true,
     })
     expect(media.data.subarray(0, 4).toString()).toBe("OggS")
+  })
+})
+
+describe("excluir conversa", () => {
+  it("apaga mensagens e arquivos, e a sincronização não traz de volta", async () => {
+    await connect()
+    const old = photo("old-img", async () => PNG)
+    old.timestamp = new Date(Date.now() - 60_000)
+    client.on.onBatch({ chats: [], contacts: [], messages: [old] }, "live")
+    await until(async () => storage.objects.size === 1)
+    const conversation = await WhatsAppConversationModel.findOne()
+    const id = String(conversation?._id)
+
+    expect(await whatsappSessionService.deleteConversation(id)).toBe(true)
+    expect(await WhatsAppConversationModel.countDocuments()).toBe(0)
+    expect(await WhatsAppMessageModel.countDocuments()).toBe(0)
+    expect(storage.objects.size).toBe(0)
+    // The contact stays known.
+    expect(await WhatsAppContactModel.countDocuments()).toBe(1)
+
+    // A later sync replays the old message and an unread count: ignored.
+    client.on.onBatch(
+      {
+        chats: [{ jid: JOAO, unreadCount: 1 }],
+        contacts: [],
+        messages: [{ ...old, id: "old-text", type: "text", media: undefined }],
+      },
+      "offline"
+    )
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(await WhatsAppConversationModel.countDocuments()).toBe(0)
+
+    // Something new from the contact brings the chat back, new only.
+    client.on.onBatch(
+      {
+        chats: [],
+        contacts: [],
+        messages: [
+          {
+            ...old,
+            id: "new-text",
+            type: "text",
+            body: "voltei",
+            media: undefined,
+            timestamp: new Date(Date.now() + 1000),
+          },
+        ],
+      },
+      "live"
+    )
+    await until(
+      async () => (await WhatsAppConversationModel.countDocuments()) === 1
+    )
+    const messages = await WhatsAppMessageModel.find().lean()
+    expect(messages.map((item) => item.whatsappMessageId)).toEqual(["new-text"])
+  })
+
+  it("responde false para conversa que não existe", async () => {
+    expect(
+      await whatsappSessionService.deleteConversation(
+        "64b000000000000000000000"
+      )
+    ).toBe(false)
   })
 })

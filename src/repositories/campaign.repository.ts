@@ -276,6 +276,16 @@ export const campaignRepository = {
     return raw ? toItem(raw) : null
   },
 
+  /** Drops the link to a conversation that no longer exists. */
+  async clearConversation(conversationId: string): Promise<void> {
+    await connectToDatabase()
+    if (!Types.ObjectId.isValid(conversationId)) return
+    await CampaignItemModel.updateMany(
+      { conversationId: new Types.ObjectId(conversationId) },
+      { $unset: { conversationId: "" } }
+    ).exec()
+  },
+
   async updateItem(itemId: string, patch: ItemPatch): Promise<void> {
     await connectToDatabase()
     const { conversationId, ...rest } = patch

@@ -231,6 +231,7 @@ describe("responder pelo CRM", () => {
     configureMediaStorage({
       put: async () => {},
       signedUrl: async (key) => `https://bucket.test/${key}`,
+      remove: async () => {},
     })
     try {
       await connectWith([incoming("ORIG", "Manda uma foto")])

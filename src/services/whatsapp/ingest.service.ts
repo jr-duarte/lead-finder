@@ -72,9 +72,18 @@ export async function ingestBatch(
   const touched = new Set<string>()
 
   const since = source === "history" ? options.historySince : undefined
-  const inWindow = since
-    ? batch.messages.filter((message) => message.timestamp >= since)
-    : batch.messages
+  // Chats the user deleted come back only with messages sent afterwards.
+  const deletedAt = await whatsappConversationRepository.deletedChatTimes([
+    ...new Set([
+      ...batch.messages.map((message) => message.chatJid),
+      ...batch.chats.map((chat) => chat.jid),
+    ]),
+  ])
+  const inWindow = batch.messages.filter((message) => {
+    if (since && message.timestamp < since) return false
+    const deleted = deletedAt.get(message.chatJid)
+    return !deleted || message.timestamp > deleted
+  })
   // Without storage there is nowhere to keep files: media stays a
   // placeholder, as if it had never been offered.
   const messages = getMediaStorage()
@@ -121,6 +130,8 @@ export async function ingestBatch(
   const chatJids = new Set<string>(messages.map((message) => message.chatJid))
   for (const chat of batch.chats) {
     if ((chat.unreadCount ?? 0) <= 0 || chatJids.has(chat.jid)) continue
+    // An unread count alone does not bring a deleted chat back.
+    if (deletedAt.has(chat.jid)) continue
     // A chat known only by LID is usually someone whose messages arrive
     // under their phone number: opening it here would duplicate them as an
     // empty conversation. It becomes a conversation once a message comes.

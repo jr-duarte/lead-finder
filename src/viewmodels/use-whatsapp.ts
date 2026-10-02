@@ -371,6 +371,31 @@ export function useSuggestReply(conversationId: string) {
   })
 }
 
+/** Deletes a conversation from the CRM (not from the phone). */
+export function useDeleteConversation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/api/whatsapp/conversations/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_data, id) => {
+      // Dropped, not refetched: the conversation no longer exists.
+      queryClient.removeQueries({ queryKey: whatsappKeys.conversation(id) })
+      queryClient.removeQueries({ queryKey: whatsappKeys.messages(id) })
+      void queryClient.invalidateQueries({
+        queryKey: whatsappKeys.conversations(),
+      })
+      toast.success("Conversa excluída.")
+    },
+    onError: (error: Error) => {
+      toast.error("Não foi possível excluir a conversa", {
+        description: error.message,
+      })
+    },
+  })
+}
+
 export function useMarkConversationRead() {
   const queryClient = useQueryClient()
   return useMutation({

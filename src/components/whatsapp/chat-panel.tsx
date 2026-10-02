@@ -27,6 +27,7 @@ import { ErrorState } from "@/components/common/error-state"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
+import { ConversationActions } from "@/components/whatsapp/conversation-actions"
 import { MessageMedia } from "@/components/whatsapp/message-media"
 import { MessageQuote } from "@/components/whatsapp/message-quote"
 import {
@@ -507,10 +508,13 @@ export function ChatPanel({
   conversationId,
   online,
   initialDraft,
+  onDeleted,
 }: {
   conversationId: string
   online: boolean
   initialDraft?: string
+  /** The conversation was deleted from its header menu. */
+  onDeleted?: () => void
 }) {
   const detail = useConversation(conversationId)
   const messages = useMessages(conversationId)
@@ -601,14 +605,21 @@ export function ChatPanel({
     <div className="flex min-h-0 flex-col">
       <div className="flex items-center gap-3 border-b px-4 py-3">
         {conversation ? (
-          <div className="min-w-0">
-            <p className="truncate font-medium">{conversation.title}</p>
-            {conversation.phone ? (
-              <p className="text-muted-foreground text-xs">
-                {formatWhatsAppPhone(conversation.phone)}
-              </p>
-            ) : null}
-          </div>
+          <>
+            <div className="min-w-0">
+              <p className="truncate font-medium">{conversation.title}</p>
+              {conversation.phone ? (
+                <p className="text-muted-foreground text-xs">
+                  {formatWhatsAppPhone(conversation.phone)}
+                </p>
+              ) : null}
+            </div>
+            <ConversationActions
+              conversationId={conversationId}
+              title={conversation.title}
+              onDeleted={onDeleted}
+            />
+          </>
         ) : (
           <Skeleton className="h-10 w-48" />
         )}

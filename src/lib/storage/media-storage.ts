@@ -1,4 +1,5 @@
 import {
+  DeleteObjectsCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -16,6 +17,7 @@ export interface MediaStorage {
   put(key: string, body: Buffer, contentType: string): Promise<void>
   /** A temporary URL the browser can load the object from. */
   signedUrl(key: string, expiresInSeconds: number): Promise<string>
+  remove(keys: string[]): Promise<void>
 }
 
 let client: S3Client | null = null
@@ -44,6 +46,27 @@ const s3Storage: MediaStorage = {
         ContentType: contentType,
       })
     )
+  },
+
+  async remove(keys) {
+    // DeleteObjects takes at most 1000 keys per call.
+    for (let start = 0; start < keys.length; start += 1000) {
+      const result = await s3().send(
+        new DeleteObjectsCommand({
+          Bucket: getEnv().AWS_S3_BUCKET,
+          Delete: {
+            Objects: keys.slice(start, start + 1000).map((Key) => ({ Key })),
+            Quiet: true,
+          },
+        })
+      )
+      const failed = result.Errors?.[0]
+      if (failed) {
+        throw new Error(
+          `S3 recusou apagar ${failed.Key}: ${failed.Code ?? ""} ${failed.Message ?? ""}`.trim()
+        )
+      }
+    }
   },
 
   signedUrl(key, expiresInSeconds) {
