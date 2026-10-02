@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest"
 
 import type { Business } from "@/domain/business"
 import { ClaudeCliError, parseCliOutput } from "@/lib/claude-cli"
-import { buildApproachPrompt, stripDashes } from "@/services/approach.service"
+import {
+  buildApproachPrompt,
+  stripDashes,
+  stripSignature,
+} from "@/services/approach.service"
 
 function business(overrides: Partial<Business> = {}): Business {
   return {
@@ -136,6 +140,55 @@ describe("stripDashes", () => {
   it("preserva hífens comuns", () => {
     expect(stripDashes("e-mail e WhatsApp 24h - ok")).toBe(
       "e-mail e WhatsApp 24h - ok"
+    )
+  })
+})
+
+describe("stripSignature", () => {
+  const seller = "Junior Duarte"
+  const body =
+    "Oi, tudo bem? Vi que vocês ainda não têm site. Posso te mostrar uma ideia?"
+
+  it("tira o nome sozinho na última linha", () => {
+    expect(stripSignature(`${body}\n\nJunior Duarte`, seller)).toBe(body)
+    expect(stripSignature(`${body}\nJunior`, seller)).toBe(body)
+  })
+
+  it("tira despedida + nome e nome + empresa", () => {
+    expect(stripSignature(`${body}\n\nAbraço,\nJunior Duarte`, seller)).toBe(
+      body
+    )
+    expect(
+      stripSignature(`${body}\n\nJunior Duarte\nDuarte Software`, seller)
+    ).toBe(body)
+    expect(stripSignature(`${body}\n— Junior`, seller)).toBe(body)
+    expect(stripSignature(`${body}\nJunior, da Duarte Software`, seller)).toBe(
+      body
+    )
+  })
+
+  it("tira a assinatura na mesma linha", () => {
+    expect(stripSignature(`${body} Abraço, Junior`, seller)).toBe(body)
+    expect(stripSignature(`${body} Junior Duarte`, seller)).toBe(body)
+  })
+
+  it("ignora acentos na comparação do nome", () => {
+    expect(stripSignature(`${body}\n\nJúnior Duarte`, seller)).toBe(body)
+  })
+
+  it("não mexe quando o nome não está assinando a mensagem", () => {
+    const intro = "Oi, aqui é o Junior. Posso te mostrar uma ideia?"
+    expect(stripSignature(intro, seller)).toBe(intro)
+    const question = `${body}\nJunior aqui, posso te ligar amanhã?`
+    expect(stripSignature(question, seller)).toBe(question)
+    expect(stripSignature(`${body}\n\nAbraço,`, seller)).toBe(
+      `${body}\n\nAbraço,`
+    )
+  })
+
+  it("sem nome do vendedor, devolve o texto como veio", () => {
+    expect(stripSignature(`${body}\n\nJunior Duarte`, undefined)).toBe(
+      `${body}\n\nJunior Duarte`
     )
   })
 })

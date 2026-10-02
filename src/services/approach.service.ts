@@ -34,7 +34,8 @@ As mensagens saem do celular e do e-mail do próprio vendedor. Se o dono do neg�
 - Evite jargão de vendas e de marketing: "solução", "alavancar", "potencializar", "otimizar", "transformar", "jornada", "sem compromisso", "agregar valor", "parceria de sucesso".
 - Não elogie de forma genérica ("adorei o trabalho de vocês"). Se for citar algo, cite o fato ("vi que vocês têm mais de 500 avaliações").
 - Sem negrito, sem marcadores e sem aspas decorativas nas mensagens de WhatsApp, e-mail e follow-up. O roteiro de ligação pode ter tópicos curtos, porque é só para o vendedor ler.
-- Assinatura simples, só o nome e a empresa, do jeito que alguém assina de verdade.`
+- WhatsApp e follow-up nunca terminam com assinatura nem despedida ("Abraço, Fulano", nome no fim, nome da empresa no fim). A pessoa já vê quem mandou, e nome no final denuncia mensagem automática. Se fizer sentido se apresentar, faça no começo e de um jeito natural ("aqui é o Junior").
+- No e-mail, termine só com o primeiro nome, como alguém faz de verdade.`
 
 const SYSTEM_PROMPT = `Você é um SDR sênior que prospecta pequenas e médias empresas no Brasil. Escreve abordagens comerciais em português do Brasil para um vendedor que vai enviá-las pessoalmente.
 
@@ -111,15 +112,101 @@ export function stripDashes(text: string): string {
     .replace(/,\s*([.,;:!?])/g, "$1")
 }
 
-function humanize(reply: ApproachReply): ApproachReply {
+const SIGN_OFF =
+  /^(um |grande )?(abraco|abracos|abs|att|atenciosamente|saudacoes|obrigad[oa]|valeu)[,.!]*$/
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+/** Lowercase, no accents, single spaces: for comparing names loosely. */
+function normalizeText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+/**
+ * Removes a signature from the end of a WhatsApp message: a closing line
+ * with the seller's name (optionally followed by a short company line) and a
+ * sign-off like "Abraço," right before it. Nobody signs WhatsApp messages;
+ * a name at the bottom reads as automated. Text without the seller's name at
+ * the end is returned unchanged.
+ */
+export function stripSignature(text: string, sellerName?: string): string {
+  const name = normalizeText(sellerName ?? "")
+  if (!name) return text
+  const firstName = name.split(" ")[0]
+
+  const isNameLine = (line: string) => {
+    const clean = normalizeText(line)
+      .replace(/^[-–—~\s]+/, "")
+      .replace(/[.,!]+$/, "")
+    if (!clean || line.includes("?")) return false
+    if (clean === name || clean === firstName) return true
+    // "Junior Duarte | Duarte Software", "Junior, da Duarte Software"
+    return (
+      clean.startsWith(firstName) &&
+      clean.split(" ").length <= 8 &&
+      clean.length <= name.length + 40
+    )
+  }
+  const isShortLine = (line: string) =>
+    line.trim().length > 0 && line.trim().length <= 40 && !line.includes("?")
+
+  const lines = text.replace(/\s+$/, "").split("\n")
+  const trimEnd = () => {
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop()
+  }
+
+  let removed = false
+  const last = lines[lines.length - 1] ?? ""
+  const beforeLast = lines[lines.length - 2] ?? ""
+  if (isNameLine(last)) {
+    lines.pop()
+    removed = true
+  } else if (lines.length > 1 && isNameLine(beforeLast) && isShortLine(last)) {
+    // Name followed by a company line.
+    lines.splice(-2, 2)
+    removed = true
+  } else {
+    // Signed on the same line: "...uma ideia? Abraço, Junior".
+    const fullName = escapeRegex(sellerName?.trim() ?? "")
+    const shortName = escapeRegex(sellerName?.trim().split(/\s+/)[0] ?? "")
+    const sameLine = new RegExp(
+      `([.!?])\\s*(?:(?:um |grande )?(?:abraço|abraços|abs|att)[,.]?\\s*)?[-–—]?\\s*(?:${fullName}|${shortName})[.!]?\\s*$`,
+      "i"
+    )
+    if (sameLine.test(last)) {
+      lines[lines.length - 1] = last.replace(sameLine, "$1")
+      removed = true
+    }
+  }
+
+  if (!removed) return text
+  trimEnd()
+  if (
+    lines.length > 1 &&
+    SIGN_OFF.test(normalizeText(lines[lines.length - 1]))
+  ) {
+    lines.pop()
+    trimEnd()
+  }
+  return lines.join("\n")
+}
+
+function humanize(reply: ApproachReply, sellerName?: string): ApproachReply {
   return {
     diagnosis: stripDashes(reply.diagnosis),
     hook: stripDashes(reply.hook),
-    whatsapp: stripDashes(reply.whatsapp),
+    whatsapp: stripSignature(stripDashes(reply.whatsapp), sellerName),
     emailSubject: stripDashes(reply.emailSubject),
     emailBody: stripDashes(reply.emailBody),
     callScript: stripDashes(reply.callScript),
-    followUp: stripDashes(reply.followUp),
+    followUp: stripSignature(stripDashes(reply.followUp), sellerName),
     objections: reply.objections.map((item) => ({
       objection: stripDashes(item.objection),
       answer: stripDashes(item.answer),
@@ -306,7 +393,7 @@ async function generateApproach(businessId: string): Promise<Business> {
   })) as ApproachReply
 
   const approach: LeadApproach = {
-    ...humanize(reply),
+    ...humanize(reply, seller.sellerName),
     generatedAt: new Date(),
     model: env.CLAUDE_CLI_MODEL,
   }

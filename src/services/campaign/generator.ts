@@ -1,7 +1,12 @@
 import { OPEN_CAMPAIGN_STATUSES, type CampaignItem } from "@/domain/campaign"
 import { campaignRepository } from "@/repositories/campaign.repository"
 import { businessRepository } from "@/repositories/business.repository"
-import { approachService, stripDashes } from "@/services/approach.service"
+import { settingsRepository } from "@/repositories/settings.repository"
+import {
+  approachService,
+  stripDashes,
+  stripSignature,
+} from "@/services/approach.service"
 import { checkLeads } from "@/services/campaign/eligibility"
 import { whatsappSessionService } from "@/services/whatsapp/session.service"
 
@@ -63,6 +68,10 @@ async function generateItem(item: CampaignItem): Promise<void> {
     return
   }
 
+  // Approaches saved before signatures were banned may still carry one.
+  const { sellerName } = await settingsRepository.getSeller()
+  message = stripSignature(stripDashes(message), sellerName)
+
   // Checked now when possible, so leads without WhatsApp never reach the
   // queue. Offline, the check happens again right before sending.
   try {
@@ -71,7 +80,7 @@ async function generateItem(item: CampaignItem): Promise<void> {
       await campaignRepository.updateItem(item.id, {
         status: "INELIGIBLE",
         reason: "Nenhum telefone deste lead tem WhatsApp.",
-        message: stripDashes(message),
+        message,
       })
       return
     }
@@ -81,7 +90,7 @@ async function generateItem(item: CampaignItem): Promise<void> {
 
   await campaignRepository.updateItem(item.id, {
     status: "READY",
-    message: stripDashes(message),
+    message,
     reason: undefined,
   })
 }

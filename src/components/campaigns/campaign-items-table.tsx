@@ -9,6 +9,7 @@ import {
   Pencil,
   RefreshCw,
   SkipForward,
+  Undo2,
 } from "lucide-react"
 
 import { CampaignItemStatusBadge } from "@/components/campaigns/campaign-status-badge"
@@ -41,6 +42,7 @@ import { formatDateTime } from "@/lib/format"
 import type { CampaignItemDTO } from "@/types/api"
 import {
   useRegenerateCampaignItem,
+  useRestoreCampaignItem,
   useUpdateCampaignItem,
 } from "@/viewmodels/use-campaigns"
 import { whatsappInboxHref } from "@/viewmodels/use-whatsapp"
@@ -124,6 +126,7 @@ function ItemActions({
   const update = useUpdateCampaignItem(campaignId)
   const regenerate = useRegenerateCampaignItem(campaignId)
   const status = item.status as CampaignItemStatus
+  const restore = useRestoreCampaignItem(campaignId)
 
   if (item.conversationId) {
     return (
@@ -132,6 +135,20 @@ function ItemActions({
           <MessageCircle className="size-4" />
           Conversa
         </Link>
+      </Button>
+    )
+  }
+
+  if (status === "SKIPPED" && !disabled) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => restore.mutate(item.id)}
+        disabled={restore.isPending}
+      >
+        <Undo2 className="size-4" />
+        Desfazer
       </Button>
     )
   }

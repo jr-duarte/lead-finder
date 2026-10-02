@@ -3,6 +3,7 @@ import {
   DEFAULT_SEND_WINDOW,
   FINAL_ITEM_STATUSES,
   isCampaignOpen,
+  OPEN_CAMPAIGN_STATUSES,
   type Campaign,
   type CampaignItem,
   type CampaignItemStatus,
@@ -11,7 +12,12 @@ import {
 import { getEnv } from "@/lib/env"
 import { campaignRepository } from "@/repositories/campaign.repository"
 import { settingsRepository } from "@/repositories/settings.repository"
-import { approachService, stripDashes } from "@/services/approach.service"
+import { businessRepository } from "@/repositories/business.repository"
+import {
+  approachService,
+  stripDashes,
+  stripSignature,
+} from "@/services/approach.service"
 import { checkLeads, type LeadCheck } from "@/services/campaign/eligibility"
 import { campaignGenerator } from "@/services/campaign/generator"
 import {
@@ -91,6 +97,55 @@ function validateWindow(window: SendWindow): SendWindow {
     startHour: window.startHour,
     endHour: window.endHour,
   }
+}
+
+/**
+ * Removes signatures from messages saved before they were banned: lead
+ * approaches and campaign messages not sent yet. Only rewrites what changes,
+ * so running it on every start is cheap and harmless.
+ */
+async function cleanSavedSignatures(): Promise<number> {
+  const { sellerName } = await settingsRepository.getSeller()
+  if (!sellerName?.trim()) return 0
+  let cleaned = 0
+
+  for (const approach of await businessRepository.approachMessages()) {
+    const whatsapp =
+      approach.whatsapp && stripSignature(approach.whatsapp, sellerName)
+    const followUp =
+      approach.followUp && stripSignature(approach.followUp, sellerName)
+    if (whatsapp !== approach.whatsapp || followUp !== approach.followUp) {
+      await businessRepository.update(approach.id, {
+        ...(whatsapp !== approach.whatsapp
+          ? { "approach.whatsapp": whatsapp }
+          : {}),
+        ...(followUp !== approach.followUp
+          ? { "approach.followUp": followUp }
+          : {}),
+      })
+      cleaned += 1
+    }
+  }
+
+  const pending: CampaignItemStatus[] = [
+    "PENDING",
+    "READY",
+    "APPROVED",
+    "FAILED",
+  ]
+  for (const campaign of await campaignRepository.listByStatus(
+    OPEN_CAMPAIGN_STATUSES
+  )) {
+    for (const item of await campaignRepository.listItems(campaign.id)) {
+      if (!item.message || !pending.includes(item.status)) continue
+      const message = stripSignature(item.message, sellerName)
+      if (message !== item.message) {
+        await campaignRepository.updateItem(item.id, { message })
+        cleaned += 1
+      }
+    }
+  }
+  return cleaned
 }
 
 export const campaignService = {
@@ -317,6 +372,33 @@ export const campaignService = {
     return requireItem(id, itemId)
   },
 
+  /**
+   * Undoes a skip. The lead is checked again first: if it was contacted or
+   * joined another campaign meanwhile, it stays out and the reason is shown.
+   * It comes back for review, never straight into the send queue.
+   */
+  async restoreItem(id: string, itemId: string): Promise<CampaignItem> {
+    await requireOpen(id)
+    const item = await requireItem(id, itemId)
+    if (item.status !== "SKIPPED") {
+      throw new CampaignError("Só leads pulados podem voltar.", 409)
+    }
+
+    // Skipped items are not counted as "in a campaign", so any campaign
+    // named here is another one.
+    const [check] = await checkLeads([item.businessId])
+    if (check?.reason) {
+      throw new CampaignError(`Não dá para voltar: ${check.reason}`, 409)
+    }
+
+    await campaignRepository.updateItem(itemId, {
+      status: item.message ? "READY" : "PENDING",
+      reason: undefined,
+    })
+    if (!item.message) campaignGenerator.kick()
+    return requireItem(id, itemId)
+  },
+
   /** Failed generations go back to the queue to be written again. */
   async retryFailed(id: string): Promise<number> {
     await requireOpen(id)
@@ -340,6 +422,12 @@ export const campaignService = {
    * the send queue.
    */
   async boot(): Promise<void> {
+    const cleaned = await cleanSavedSignatures()
+    if (cleaned > 0) {
+      console.info(
+        `[campanha] assinatura removida de ${cleaned} mensagem(ns) salvas`
+      )
+    }
     await recoverInterruptedSends()
     await campaignGenerator.recover()
     campaignGenerator.kick()

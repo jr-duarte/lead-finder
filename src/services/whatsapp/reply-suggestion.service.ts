@@ -17,6 +17,7 @@ import {
   describeLead,
   HUMAN_WRITING_RULES,
   stripDashes,
+  stripSignature,
 } from "@/services/approach.service"
 
 /**
@@ -232,7 +233,10 @@ async function suggestReply(
     }
   )) as { reply: string; rationale: string }
 
-  const reply = stripDashes(result.reply).trim()
+  const reply = stripSignature(
+    stripDashes(result.reply),
+    seller.sellerName
+  ).trim()
   if (!reply) {
     throw new ReplySuggestionError(
       "O Claude não sugeriu nenhuma mensagem. Tente novamente.",

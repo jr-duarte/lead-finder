@@ -356,6 +356,29 @@ export const businessRepository = {
     return raw ? toBusiness(raw) : null
   },
 
+  /** The WhatsApp texts of every saved approach, for bulk text fixes. */
+  async approachMessages(): Promise<
+    { id: string; whatsapp?: string; followUp?: string }[]
+  > {
+    await connectToDatabase()
+    const raw = await BusinessModel.find({
+      "approach.whatsapp": { $exists: true },
+    })
+      .select("approach.whatsapp approach.followUp")
+      .lean<
+        {
+          _id: Types.ObjectId
+          approach?: { whatsapp?: string; followUp?: string }
+        }[]
+      >()
+      .exec()
+    return raw.map((item) => ({
+      id: String(item._id),
+      whatsapp: item.approach?.whatsapp ?? undefined,
+      followUp: item.approach?.followUp ?? undefined,
+    }))
+  },
+
   async deleteMany(ids: string[]): Promise<number> {
     await connectToDatabase()
     const valid = ids.filter((id) => Types.ObjectId.isValid(id))

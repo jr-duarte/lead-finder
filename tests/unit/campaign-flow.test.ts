@@ -252,6 +252,71 @@ describe("criação e geração", () => {
     expect((await items(campaign.id))[0]?.message).toBe("Mensagem pronta")
   })
 
+  it("tira a assinatura de uma abordagem antiga reaproveitada", async () => {
+    await settingsRepository.updateSeller({
+      offer: "Sites para padarias",
+      sellerName: "Junior Duarte",
+    })
+    const id = await seedLead("Assinada", "(11) 99999-0001", {
+      approach: {
+        generatedAt: new Date(),
+        whatsapp: "Oi, posso te mostrar uma ideia?\n\nAbraço,\nJunior Duarte",
+        objections: [],
+      },
+    })
+    hasWhatsApp("5511999990001")
+
+    const { campaign } = await campaignService.create({
+      name: "Sem assinatura",
+      businessIds: [id],
+    })
+    await waitForGeneration(campaign.id)
+
+    expect((await items(campaign.id))[0]?.message).toBe(
+      "Oi, posso te mostrar uma ideia?"
+    )
+  })
+
+  it("ao subir, limpa assinaturas já salvas sem tocar no que foi enviado", async () => {
+    const id = await seedLead("Antiga", "(11) 99999-0001", {
+      approach: {
+        generatedAt: new Date(),
+        whatsapp: "Oi, tudo bem?\nJunior Duarte",
+        followUp: "E aí, conseguiu ver?\n\nJunior",
+        objections: [],
+      },
+    })
+    hasWhatsApp("5511999990001")
+    const { campaign } = await campaignService.create({
+      name: "Antiga",
+      businessIds: [id],
+    })
+    await waitForGeneration(campaign.id)
+    const [item] = await items(campaign.id)
+    // Simulates messages written before the fix.
+    await CampaignItemModel.updateOne(
+      { _id: item.id },
+      { $set: { message: "Oi, tudo bem?\nJunior Duarte" } }
+    )
+    await BusinessModel.updateOne(
+      { _id: id },
+      { $set: { "approach.whatsapp": "Oi, tudo bem?\nJunior Duarte" } }
+    )
+    await settingsRepository.updateSeller({
+      offer: "Sites para padarias",
+      sellerName: "Junior Duarte",
+    })
+
+    await campaignService.boot()
+
+    expect((await items(campaign.id))[0]?.message).toBe("Oi, tudo bem?")
+    const business = await BusinessModel.findById(id).lean<{
+      approach?: { whatsapp?: string; followUp?: string }
+    }>()
+    expect(business?.approach?.whatsapp).toBe("Oi, tudo bem?")
+    expect(business?.approach?.followUp).toBe("E aí, conseguiu ver?")
+  })
+
   it("exige a oferta configurada", async () => {
     await settingsRepository.updateSeller({ offer: "" })
     const id = await seedLead("X", "(11) 99999-0001")
@@ -410,6 +475,75 @@ describe("fila de envio", () => {
     await whatsappSessionService.disconnect()
     await tick(THURSDAY_10H)
     expect(client.sent).toHaveLength(0)
+  })
+})
+
+describe("pular e desfazer", () => {
+  async function campaignWithOne() {
+    const id = await seedLead("Lead Pulado", "(11) 99999-0001")
+    hasWhatsApp("5511999990001")
+    const { campaign } = await campaignService.create({
+      name: "Desfazer",
+      businessIds: [id],
+    })
+    await waitForGeneration(campaign.id)
+    const [item] = await items(campaign.id)
+    return { businessId: id, campaignId: campaign.id, itemId: item.id }
+  }
+
+  it("um lead pulado volta para aprovação com a mesma mensagem", async () => {
+    const { campaignId, itemId } = await campaignWithOne()
+    const before = (await items(campaignId))[0]?.message
+
+    await campaignService.updateItem(campaignId, itemId, { status: "SKIPPED" })
+    expect((await items(campaignId))[0]?.status).toBe("SKIPPED")
+
+    const restored = await campaignService.restoreItem(campaignId, itemId)
+    expect(restored.status).toBe("READY")
+    expect(restored.message).toBe(before)
+  })
+
+  it("sem mensagem, volta para a fila de geração", async () => {
+    const { campaignId, itemId } = await campaignWithOne()
+    await CampaignItemModel.updateOne(
+      { _id: itemId },
+      { $set: { status: "SKIPPED" }, $unset: { message: 1 } }
+    )
+
+    await campaignService.restoreItem(campaignId, itemId)
+    await until(async () => (await items(campaignId))[0]?.status === "READY")
+  })
+
+  it("não volta se o lead foi contatado ou entrou em outra campanha", async () => {
+    const { businessId, campaignId, itemId } = await campaignWithOne()
+    await campaignService.updateItem(campaignId, itemId, { status: "SKIPPED" })
+
+    // Released by the skip, the lead joins another campaign...
+    const other = await campaignService.create({
+      name: "Outra",
+      businessIds: [businessId],
+    })
+    expect(other.added).toBe(1)
+    await expect(
+      campaignService.restoreItem(campaignId, itemId)
+    ).rejects.toMatchObject({ status: 409, message: /"Outra"/ })
+
+    // ...or gets contacted by hand.
+    await campaignService.cancel(other.campaign.id)
+    await BusinessModel.updateOne(
+      { _id: businessId },
+      { pipeline: { stage: "CONTACTED", position: 0, enteredAt: new Date() } }
+    )
+    await expect(
+      campaignService.restoreItem(campaignId, itemId)
+    ).rejects.toMatchObject({ status: 409, message: /contatado/ })
+  })
+
+  it("só desfaz itens pulados", async () => {
+    const { campaignId, itemId } = await campaignWithOne()
+    await expect(
+      campaignService.restoreItem(campaignId, itemId)
+    ).rejects.toMatchObject({ status: 409 })
   })
 })
 

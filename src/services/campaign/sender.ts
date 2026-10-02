@@ -9,8 +9,10 @@ import {
 } from "@/domain/campaign"
 import { getEnv } from "@/lib/env"
 import { campaignRepository } from "@/repositories/campaign.repository"
+import { settingsRepository } from "@/repositories/settings.repository"
 import { whatsappConversationRepository } from "@/repositories/whatsapp-conversation.repository"
 import { whatsappMessageRepository } from "@/repositories/whatsapp-message.repository"
+import { stripSignature } from "@/services/approach.service"
 import { checkLeads } from "@/services/campaign/eligibility"
 import {
   WhatsAppActionError,
@@ -130,7 +132,10 @@ async function sendItem(
     const conversation = await whatsappSessionService.startConversation(
       item.businessId
     )
-    await whatsappSessionService.sendText(conversation.id, item.message ?? "")
+    // Last line of defense: nobody signs WhatsApp messages.
+    const { sellerName } = await settingsRepository.getSeller()
+    const message = stripSignature(item.message ?? "", sellerName)
+    await whatsappSessionService.sendText(conversation.id, message)
     await campaignRepository.updateItem(item.id, {
       status: "SENT",
       sentAt: now,

@@ -168,6 +168,22 @@ export function useUpdateCampaignItem(campaignId: string) {
   })
 }
 
+export function useRestoreCampaignItem(campaignId: string) {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: (itemId: string) =>
+      apiFetch<CampaignItemDTO>(
+        `/api/campaigns/${campaignId}/items/${itemId}/restore`,
+        { method: "POST" }
+      ),
+    onSuccess: () => {
+      toast.success("Lead de volta à campanha. Revise e aprove.")
+      void invalidate()
+    },
+    onError: onError("Não foi possível desfazer"),
+  })
+}
+
 export function useRegenerateCampaignItem(campaignId: string) {
   const invalidate = useInvalidate()
   return useMutation({
