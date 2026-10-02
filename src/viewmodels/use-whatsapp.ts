@@ -279,6 +279,28 @@ export function useSendMessage(conversationId: string) {
   })
 }
 
+export type ReplySuggestionDTO = {
+  reply: string
+  rationale: string
+  model: string
+}
+
+/** Asks Claude for the next message; the caller puts it in the composer. */
+export function useSuggestReply(conversationId: string) {
+  return useMutation({
+    mutationFn: (draft?: string) =>
+      apiFetch<ReplySuggestionDTO>(
+        `/api/whatsapp/conversations/${conversationId}/suggest`,
+        { method: "POST", body: JSON.stringify({ draft }) }
+      ),
+    onError: (error: Error) => {
+      toast.error("Não foi possível sugerir uma resposta", {
+        description: error.message,
+      })
+    },
+  })
+}
+
 export function useMarkConversationRead() {
   const queryClient = useQueryClient()
   return useMutation({

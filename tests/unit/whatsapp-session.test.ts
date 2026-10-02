@@ -516,6 +516,43 @@ describe("iniciar conversa com um lead", () => {
   })
 })
 
+describe("hot reload em desenvolvimento", () => {
+  it("troca um cliente criado por código antigo, sem pedir QR Code", async () => {
+    const businessId = await seedLead()
+    await connectAndSync([])
+
+    // What a hot reload leaves behind: a live client built by older code,
+    // without the methods added since.
+    const stale = client
+    const staleWithoutCheck = stale as unknown as Record<string, unknown>
+    delete staleWithoutCheck.checkNumber
+    staleWithoutCheck.checkNumber = undefined
+    const globalRuntime = (
+      globalThis as unknown as {
+        __leadFinderWhatsApp: { clientVersion?: number }
+      }
+    ).__leadFinderWhatsApp
+    globalRuntime.clientVersion = 1
+
+    const fresh = new FakeWhatsAppClient()
+    fresh.registered.set("5511999998888", JOAO)
+    configureWhatsAppRuntime({
+      factory: () => fresh,
+      settleMs: 20,
+      maxSyncMs: 2000,
+      reconnectDelayMs: 5,
+    })
+
+    const pending = whatsappSessionService.startConversation(businessId)
+    await until(() => fresh.starts === 1)
+    fresh.on.onOpen({ phone: "5511000000000" })
+
+    const conversation = await pending
+    expect(conversation.whatsappChatId).toBe(JOAO)
+    expect(stale.starts).toBe(1)
+  })
+})
+
 describe("funil automático", () => {
   async function openWithLead(fields: Record<string, unknown> = {}) {
     const businessId = await seedLead(fields)

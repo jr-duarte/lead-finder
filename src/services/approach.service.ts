@@ -21,6 +21,21 @@ export class ApproachInputError extends Error {
   }
 }
 
+/**
+ * How every message the seller sends should read. Shared with the WhatsApp
+ * reply suggestions so both sound like the same person.
+ */
+export const HUMAN_WRITING_RULES = `Escrita humana:
+As mensagens saem do celular e do e-mail do próprio vendedor. Se o dono do negócio sentir cheiro de texto automático ou de IA, ignora na hora. Escreva como uma pessoa real digitando rápido para outra, não como um redator.
+- Nunca use travessão (— ou –) em nenhum campo. Onde ele caberia, use vírgula, ponto ou quebre em duas frases.
+- Nada de emojis, a não ser que as instruções de tom do vendedor peçam.
+- Português falado do dia a dia: "pra", "tô", "vi que", "queria te perguntar". Frases curtas e diretas, com ritmo irregular, sem cada frase ter o mesmo tamanho.
+- Evite as marcas típicas de IA: aberturas como "Espero que esteja bem" ou "Tudo bem? Espero que sim"; a estrutura "não é X, é Y"; listas de três adjetivos ou benefícios; perguntas retóricas em série; frases de efeito no final.
+- Evite jargão de vendas e de marketing: "solução", "alavancar", "potencializar", "otimizar", "transformar", "jornada", "sem compromisso", "agregar valor", "parceria de sucesso".
+- Não elogie de forma genérica ("adorei o trabalho de vocês"). Se for citar algo, cite o fato ("vi que vocês têm mais de 500 avaliações").
+- Sem negrito, sem marcadores e sem aspas decorativas nas mensagens de WhatsApp, e-mail e follow-up. O roteiro de ligação pode ter tópicos curtos, porque é só para o vendedor ler.
+- Assinatura simples, só o nome e a empresa, do jeito que alguém assina de verdade.`
+
 const SYSTEM_PROMPT = `Você é um SDR sênior que prospecta pequenas e médias empresas no Brasil. Escreve abordagens comerciais em português do Brasil para um vendedor que vai enviá-las pessoalmente.
 
 Regras:
@@ -37,16 +52,7 @@ Regras:
 - Se houver anotações, respeite o histórico e a etapa do funil: não escreva como primeiro contato para quem já conversou.
 - Siga as instruções de tom do vendedor quando houver.
 
-Escrita humana:
-As mensagens saem do celular e do e-mail do próprio vendedor. Se o dono do negócio sentir cheiro de texto automático ou de IA, ignora na hora. Escreva como uma pessoa real digitando rápido para outra, não como um redator.
-- Nunca use travessão (— ou –) em nenhum campo. Onde ele caberia, use vírgula, ponto ou quebre em duas frases.
-- Nada de emojis, a não ser que as instruções de tom do vendedor peçam.
-- Português falado do dia a dia: "pra", "tô", "vi que", "queria te perguntar". Frases curtas e diretas, com ritmo irregular, sem cada frase ter o mesmo tamanho.
-- Evite as marcas típicas de IA: aberturas como "Espero que esteja bem" ou "Tudo bem? Espero que sim"; a estrutura "não é X, é Y"; listas de três adjetivos ou benefícios; perguntas retóricas em série; frases de efeito no final.
-- Evite jargão de vendas e de marketing: "solução", "alavancar", "potencializar", "otimizar", "transformar", "jornada", "sem compromisso", "agregar valor", "parceria de sucesso".
-- Não elogie de forma genérica ("adorei o trabalho de vocês"). Se for citar algo, cite o fato ("vi que vocês têm mais de 500 avaliações").
-- Sem negrito, sem marcadores e sem aspas decorativas nas mensagens de WhatsApp, e-mail e follow-up. O roteiro de ligação pode ter tópicos curtos, porque é só para o vendedor ler.
-- Assinatura simples, só o nome e a empresa, do jeito que alguém assina de verdade.`
+${HUMAN_WRITING_RULES}`
 
 const APPROACH_SCHEMA = {
   type: "object",
@@ -133,15 +139,15 @@ function section(title: string, lines: (string | null)[]): string | null {
 }
 
 /**
- * Lays out everything the app knows about the lead. Missing fields are left
+ * Lays out everything the app knows about the lead, as prompt sections. Missing fields are left
  * out rather than printed empty, and "no website" is stated explicitly
  * because it is often the whole pitch.
  */
-export function buildApproachPrompt(
+export function describeLead(
   business: Business,
   notes: Note[],
   seller: SellerProfile
-): string {
+): string[] {
   const { address, enrichment, registry } = business
   const socials = enrichment.socials
 
@@ -225,9 +231,17 @@ export function buildApproachPrompt(
       : null,
   ]
 
+  return parts.filter((part): part is string => Boolean(part))
+}
+
+export function buildApproachPrompt(
+  business: Business,
+  notes: Note[],
+  seller: SellerProfile
+): string {
   return [
     "Escreva a abordagem comercial para este lead.",
-    ...parts.filter(Boolean),
+    ...describeLead(business, notes, seller),
   ].join("\n\n")
 }
 

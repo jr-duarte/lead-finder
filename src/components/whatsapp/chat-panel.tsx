@@ -7,9 +7,13 @@ import {
   Check,
   CheckCheck,
   Clock,
+  Lightbulb,
   Loader2,
   MessageSquare,
   Send,
+  Sparkles,
+  Wand2,
+  X,
 } from "lucide-react"
 
 import { EmptyState } from "@/components/common/empty-state"
@@ -29,6 +33,7 @@ import {
   useMarkConversationRead,
   useMessages,
   useSendMessage,
+  useSuggestReply,
 } from "@/viewmodels/use-whatsapp"
 
 const timeFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -122,21 +127,57 @@ function Composer({
   initialDraft?: string
 }) {
   const send = useSendMessage(conversationId)
+  const suggest = useSuggestReply(conversationId)
   // A prefilled text (e.g. the AI approach) is only a draft: the user
   // reviews it and decides to send.
   const [draft, setDraft] = React.useState(initialDraft)
+  /** Why Claude wrote what it wrote, and what to double-check. */
+  const [rationale, setRationale] = React.useState<string | null>(null)
+  const textarea = React.useRef<HTMLTextAreaElement>(null)
+
+  const hasDraft = draft.trim().length > 0
 
   const submit = async () => {
     const text = draft.trim()
     if (!text || !online) return
     await send.mutateAsync(text)
     setDraft("")
+    setRationale(null)
+  }
+
+  // With text in the box it polishes the draft; empty, it writes one.
+  const requestSuggestion = async () => {
+    const suggestion = await suggest.mutateAsync(hasDraft ? draft : undefined)
+    setDraft(suggestion.reply)
+    setRationale(suggestion.rationale || null)
+    textarea.current?.focus()
   }
 
   return (
-    <div className="border-t p-3">
+    <div className="space-y-2 border-t p-3">
+      {suggest.isPending ? (
+        <p className="text-muted-foreground flex items-center gap-2 text-xs">
+          <Loader2 className="size-3.5 animate-spin" />O Claude está escrevendo.
+          Pode levar até um minuto.
+        </p>
+      ) : rationale ? (
+        <div className="bg-muted text-muted-foreground flex items-start gap-2 rounded-md px-2.5 py-1.5 text-xs">
+          <Lightbulb className="mt-0.5 size-3.5 shrink-0" />
+          <p className="flex-1">{rationale}</p>
+          <button
+            type="button"
+            onClick={() => setRationale(null)}
+            className="hover:text-foreground shrink-0"
+            aria-label="Fechar dica"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      ) : null}
+
       <div className="flex items-end gap-2">
         <Textarea
+          ref={textarea}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
@@ -151,14 +192,36 @@ function Composer({
               ? "Digite uma mensagem..."
               : "Conecte o WhatsApp para enviar mensagens"
           }
-          disabled={!online || send.isPending}
+          // Locked while Claude writes, so the suggestion never clobbers
+          // something typed in the meantime.
+          disabled={send.isPending || suggest.isPending}
           rows={1}
           className="max-h-40 min-h-10 resize-none"
           aria-label="Mensagem"
         />
         <Button
+          variant="outline"
+          onClick={requestSuggestion}
+          disabled={suggest.isPending || send.isPending}
+          aria-label={
+            hasDraft ? "Melhorar texto com IA" : "Sugerir resposta com IA"
+          }
+          title={hasDraft ? "Melhorar texto com IA" : "Sugerir resposta com IA"}
+        >
+          {suggest.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : hasDraft ? (
+            <Wand2 className="size-4" />
+          ) : (
+            <Sparkles className="size-4" />
+          )}
+          <span className="hidden lg:inline">
+            {hasDraft ? "Melhorar" : "Sugerir resposta"}
+          </span>
+        </Button>
+        <Button
           onClick={submit}
-          disabled={!online || !draft.trim() || send.isPending}
+          disabled={!online || !hasDraft || send.isPending || suggest.isPending}
           aria-label="Enviar"
         >
           {send.isPending ? (

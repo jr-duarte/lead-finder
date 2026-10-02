@@ -43,4 +43,9 @@ export const linkLeadSchema = z.object({
     .nullable(),
 })
 
+export const suggestReplySchema = z.object({
+  /** What the user already typed; the suggestion keeps its intent. */
+  draft: z.string().max(4096).optional(),
+})
+
 export type SendMessageInput = z.infer<typeof sendMessageSchema>

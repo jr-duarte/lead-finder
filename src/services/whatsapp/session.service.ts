@@ -76,7 +76,18 @@ type Runtime = {
   reconnectTimer?: ReturnType<typeof setTimeout>
   /** Set while we close the socket on purpose. */
   stopping: boolean
+  /** CLIENT_API_VERSION of the code that created `client`. */
+  clientVersion?: number
+  /** Present while a stale client is being replaced. */
+  swapping?: Promise<void>
 }
+
+/**
+ * Bump whenever the WhatsAppClient interface changes. The runtime survives
+ * dev hot reloads, so without this a client built by older code (missing a
+ * new method) would stay in use until the server restarts.
+ */
+const CLIENT_API_VERSION = 2
 
 // Shared across hot reloads and across the instrumentation/route bundles, so
 // there is never more than one socket for the session.
@@ -125,6 +136,8 @@ export function resetWhatsAppRuntime(): void {
     pending: 0,
     reconnectAttempts: 0,
     stopping: false,
+    clientVersion: undefined,
+    swapping: undefined,
   } satisfies Runtime)
 }
 
@@ -181,6 +194,27 @@ function enqueue<T>(task: () => Promise<T>): Promise<T> {
   })
 }
 
+/**
+ * Queues work whose failure must fail the running sync. The error is recorded
+ * inside the task, before the queue moves on, so a sync finishing right after
+ * can never miss it and report success.
+ */
+function enqueueSyncWork(
+  task: () => Promise<void>,
+  failure: string,
+  target: () => ActiveSync | null = () => runtime.sync
+): void {
+  void enqueue(async () => {
+    try {
+      await task()
+    } catch (error) {
+      console.error(`[whatsapp] ${failure}`, error)
+      const sync = target()
+      if (sync) sync.error = errorMessage(error, failure)
+    }
+  })
+}
+
 async function waitForQueue(): Promise<void> {
   while (runtime.pending > 0) await runtime.queue
 }
@@ -220,19 +254,19 @@ function beginSync(trigger: "connect" | "manual"): void {
   setStatus("SYNCING")
 
   // First in the queue, so no batch is persisted before the window is known.
-  void enqueue(async () => {
-    runtime.historySince = await computeHistorySince()
-    log(
-      `sincronização iniciada (${trigger === "manual" ? "manual" : "ao conectar"}), histórico desde ${runtime.historySince.toISOString()}`
-    )
-  }).catch((error) => {
-    sync.error = errorMessage(error, "Falha ao ler a última sincronização.")
-  })
+  enqueueSyncWork(
+    async () => {
+      runtime.historySince = await computeHistorySince()
+      log(
+        `sincronização iniciada (${trigger === "manual" ? "manual" : "ao conectar"}), histórico desde ${runtime.historySince.toISOString()}`
+      )
+    },
+    "Falha ao ler a última sincronização.",
+    () => sync
+  )
 
   if (trigger === "manual") {
-    void enqueue(reconcile).catch((error) => {
-      sync.error = errorMessage(error, "Falha ao reconciliar conversas.")
-    })
+    enqueueSyncWork(reconcile, "Falha ao reconciliar conversas.", () => sync)
   }
 
   sync.maxTimer = setTimeout(
@@ -364,7 +398,7 @@ async function applyPipelineAutomation(result: IngestResult): Promise<void> {
 }
 
 function handleBatch(batch: WaBatch, source: WaBatchSource) {
-  void enqueue(async () => {
+  enqueueSyncWork(async () => {
     const result = await ingestBatch(batch, source, {
       historySince: runtime.historySince,
     })
@@ -385,12 +419,7 @@ function handleBatch(batch: WaBatch, source: WaBatchSource) {
         conversationIds: result.conversationIds,
       })
     }
-  }).catch((error) => {
-    console.error("[whatsapp] falha ao salvar mensagens", error)
-    if (runtime.sync) {
-      runtime.sync.error = errorMessage(error, "Falha ao salvar mensagens.")
-    }
-  })
+  }, "Falha ao salvar mensagens.")
   // Fresh data restarts the quiet period.
   scheduleSettle()
 }
@@ -552,6 +581,7 @@ async function startClient(): Promise<void> {
         return message?.fromMe ? message.body : undefined
       },
     })
+    runtime.clientVersion = CLIENT_API_VERSION
   }
 
   if (runtime.status !== "RECONNECTING") setStatus("INITIALIZING")
@@ -568,6 +598,54 @@ async function startClient(): Promise<void> {
     )
   }
 }
+
+/** Waits while a (re)connection is still being set up. */
+async function waitUntilSettled(timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (
+    Date.now() < deadline &&
+    (runtime.status === "INITIALIZING" || runtime.status === "RECONNECTING")
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
+/**
+ * Replaces a client created by older code with a fresh one on the same saved
+ * session — no QR code. Only ever happens in development, after a hot reload
+ * that changed the client.
+ */
+async function refreshStaleClient(): Promise<void> {
+  if (!runtime.client || runtime.clientVersion === CLIENT_API_VERSION) return
+
+  runtime.swapping ??= (async () => {
+    log("o código do cliente mudou; reconectando com a mesma sessão")
+    const stale = runtime.client
+    clearTimers()
+    abortSync("cliente substituído")
+    runtime.stopping = true
+    try {
+      await stale?.stop()
+    } catch (error) {
+      console.error("[whatsapp] falha ao fechar o cliente antigo", error)
+    } finally {
+      runtime.stopping = false
+    }
+    runtime.client = null
+    runtime.status = "RECONNECTING"
+    await startClient()
+    await waitUntilSettled(20_000)
+  })().finally(() => {
+    runtime.swapping = undefined
+  })
+
+  await runtime.swapping
+}
+
+// Swap right away after a hot reload, so the next action finds it connected.
+void refreshStaleClient().catch((error) =>
+  console.error("[whatsapp] falha ao atualizar o cliente", error)
+)
 
 export type WhatsAppSnapshot = {
   enabled: boolean
@@ -699,6 +777,7 @@ export const whatsappSessionService = {
     if (!conversation)
       throw new WhatsAppActionError("Conversa não encontrada.", 404)
 
+    await refreshStaleClient()
     const client = runtime.client
     if (!client || !isWhatsAppOnline(runtime.status)) {
       throw new WhatsAppActionError(
@@ -759,6 +838,7 @@ export const whatsappSessionService = {
       )
     }
 
+    await refreshStaleClient()
     const client = runtime.client
     if (!client || !isWhatsAppOnline(runtime.status)) {
       throw new WhatsAppActionError(
