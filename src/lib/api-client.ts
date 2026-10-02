@@ -6,7 +6,10 @@ export async function apiFetch<T>(
   const response = await fetch(input, {
     ...init,
     headers: {
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      // FormData sets its own multipart boundary.
+      ...(typeof init?.body === "string"
+        ? { "Content-Type": "application/json" }
+        : {}),
       ...init?.headers,
     },
   })

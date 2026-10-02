@@ -60,6 +60,25 @@ const envSchema = z.object({
     .min(0)
     .max(90)
     .default(30),
+  /**
+   * S3 bucket for WhatsApp images and audio. Empty disables media: messages
+   * show placeholders and sending files is off. Credentials come from the
+   * AWS SDK's usual chain (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, profile).
+   */
+  AWS_S3_BUCKET: z.string().trim().default(""),
+  AWS_REGION: z.string().trim().min(1).default("us-east-1"),
+  /** Folder inside the bucket. */
+  AWS_S3_PREFIX: z
+    .string()
+    .trim()
+    .default("whatsapp")
+    .transform((value) => value.replace(/^\/+|\/+$/g, "")),
+  /** S3-compatible endpoint (R2, MinIO...); empty for AWS itself. */
+  AWS_S3_ENDPOINT: z.string().trim().default(""),
+  /** Largest file accepted for sending, in MB. */
+  WHATSAPP_MEDIA_MAX_MB: z.coerce.number().int().min(1).max(64).default(16),
+  /** ffmpeg used to turn recordings into voice notes; empty uses the bundled one. */
+  FFMPEG_PATH: z.string().trim().default(""),
 })
 
 export type Env = z.infer<typeof envSchema>

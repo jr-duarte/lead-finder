@@ -3,8 +3,10 @@ import type {
   WaBatch,
   WaBatchSource,
   WaContact,
+  WaMedia,
   WaMessage,
 } from "@/lib/whatsapp/client"
+import { getMediaStorage } from "@/lib/storage/media-storage"
 import { whatsappConversationRepository } from "@/repositories/whatsapp-conversation.repository"
 import { whatsappMessageRepository } from "@/repositories/whatsapp-message.repository"
 import { findLeadByPhone } from "@/services/whatsapp/lead-matcher"
@@ -17,6 +19,14 @@ export type IngestResult = {
   repliedConversationIds: string[]
   /** Conversations that got a new message sent by us. */
   contactedConversationIds: string[]
+  /** Files of the new messages, still to be fetched and stored. */
+  media: PendingMedia[]
+}
+
+export type PendingMedia = {
+  conversationId: string
+  whatsappMessageId: string
+  media: WaMedia
 }
 
 export type IngestOptions = {
@@ -58,9 +68,16 @@ export async function ingestBatch(
   const touched = new Set<string>()
 
   const since = source === "history" ? options.historySince : undefined
-  const messages = since
+  const inWindow = since
     ? batch.messages.filter((message) => message.timestamp >= since)
     : batch.messages
+  // Without storage there is nowhere to keep files: media stays a
+  // placeholder, as if it had never been offered.
+  const messages = getMediaStorage()
+    ? inWindow
+    : inWindow.map((message) =>
+        message.media ? { ...message, media: undefined } : message
+      )
 
   // 1. Contacts WhatsApp told us about. Anything stored under a LID that now
   //    has a phone number is merged first, so it is not stored twice.
@@ -186,9 +203,27 @@ export async function ingestBatch(
     }
   }
 
+  const mediaById = new Map(
+    messages.flatMap((message) =>
+      message.media ? [[message.id, message.media] as const] : []
+    )
+  )
+
   return {
     conversationIds: [...touched],
     newMessages: inserted.length,
+    media: inserted.flatMap((item) => {
+      const media = mediaById.get(item.whatsappMessageId)
+      return media
+        ? [
+            {
+              conversationId: item.conversationId,
+              whatsappMessageId: item.whatsappMessageId,
+              media,
+            },
+          ]
+        : []
+    }),
     repliedConversationIds: [...newIncoming.keys()],
     contactedConversationIds: [...withNewOutgoing],
   }

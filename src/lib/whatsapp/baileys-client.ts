@@ -3,10 +3,13 @@ import { rm } from "node:fs/promises"
 import makeWASocket, {
   Browsers,
   DisconnectReason,
+  downloadMediaMessage,
   fetchLatestBaileysVersion,
   jidNormalizedUser,
   // Not a React hook despite the name; aliased so the hooks lint rule agrees.
   useMultiFileAuthState as loadMultiFileAuthState,
+  type AnyMessageContent,
+  type WAMessage,
   type WASocket,
 } from "baileys"
 
@@ -23,6 +26,7 @@ import {
   normalizeMessage,
   phoneFromJid,
   statusFromAck,
+  type MediaDownloader,
 } from "@/lib/whatsapp/baileys-normalize"
 
 /**
@@ -86,6 +90,19 @@ export function createBaileysClient(
   const compact = <T>(items: (T | null)[]) =>
     items.filter((item): item is T => item !== null)
 
+  // Sent messages carry no downloader: the caller already has the file.
+  const send = async (chatJid: string, content: AnyMessageContent) => {
+    if (!socket) throw new Error("WhatsApp não está conectado.")
+
+    const sent = await socket.sendMessage(chatJid, content)
+    const me = socket.user?.id ? jidNormalizedUser(socket.user.id) : "me"
+    const normalized = sent ? normalizeMessage(sent, me) : null
+    if (!normalized) {
+      throw new Error("O WhatsApp não confirmou o envio da mensagem.")
+    }
+    return { ...normalized, chatJid, to: chatJid }
+  }
+
   return {
     async start(handlers) {
       // A restart replaces the socket; the old one must not keep emitting.
@@ -121,6 +138,16 @@ export function createBaileysClient(
 
       let sawQr = false
       const me = () => (sock.user?.id ? jidNormalizedUser(sock.user.id) : "")
+      // Old media is gone from WhatsApp's CDN; the phone can re-upload it.
+      const download: MediaDownloader = (message) =>
+        downloadMediaMessage(
+          message,
+          "buffer",
+          {},
+          { reuploadRequest: sock.updateMediaMessage, logger }
+        )
+      const normalize = (message: WAMessage) =>
+        normalizeMessage(message, me(), download)
 
       sock.ev.on("creds.update", saveCreds)
 
@@ -171,9 +198,7 @@ export function createBaileysClient(
           {
             chats: compact(history.chats.map(normalizeChat)),
             contacts: compact(history.contacts.map(normalizeContact)),
-            messages: compact(
-              history.messages.map((message) => normalizeMessage(message, me()))
-            ),
+            messages: compact(history.messages.map(normalize)),
           },
           "history"
         )
@@ -185,9 +210,7 @@ export function createBaileysClient(
           {
             chats: [],
             contacts: [],
-            messages: compact(
-              messages.map((message) => normalizeMessage(message, me()))
-            ),
+            messages: compact(messages.map(normalize)),
           },
           type === "notify" ? "live" : "offline"
         )
@@ -247,16 +270,25 @@ export function createBaileysClient(
       })
     },
 
-    async sendText(chatJid, text) {
-      if (!socket) throw new Error("WhatsApp não está conectado.")
+    sendText(chatJid, text) {
+      return send(chatJid, { text })
+    },
 
-      const sent = await socket.sendMessage(chatJid, { text })
-      const me = socket.user?.id ? jidNormalizedUser(socket.user.id) : "me"
-      const normalized = sent ? normalizeMessage(sent, me) : null
-      if (!normalized) {
-        throw new Error("O WhatsApp não confirmou o envio da mensagem.")
-      }
-      return { ...normalized, chatJid, to: chatJid }
+    sendMedia(chatJid, media) {
+      return send(
+        chatJid,
+        media.kind === "image"
+          ? {
+              image: media.data,
+              mimetype: media.mimeType,
+              caption: media.caption || undefined,
+            }
+          : {
+              audio: media.data,
+              mimetype: media.mimeType,
+              ptt: media.voiceNote,
+            }
+      )
     },
 
     async checkNumber(phone) {

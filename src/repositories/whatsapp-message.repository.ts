@@ -2,6 +2,7 @@ import { Types } from "mongoose"
 
 import {
   lowerMessageStatuses,
+  type WhatsAppMediaStatus,
   type WhatsAppMessage,
   type WhatsAppMessageStatus,
   type WhatsAppMessageType,
@@ -18,7 +19,36 @@ type RawMessage = WhatsAppMessageDocument & {
   createdAt?: Date
 }
 
+/** The CRM route that redirects to the stored file. */
+export function whatsappMediaPath(messageId: string): string {
+  return `/api/whatsapp/media/${messageId}`
+}
+
+/**
+ * A download interrupted by a restart never finishes: past this age a
+ * pending file reads as unavailable instead of loading forever.
+ */
+const MEDIA_STALLED_AFTER_MS = 10 * 60 * 1000
+
+function mediaStatus(raw: RawMessage): WhatsAppMediaStatus {
+  const status = raw.media?.status as WhatsAppMediaStatus
+  const insertedAt = (raw.createdAt ?? raw.timestamp).getTime()
+  return status === "pending" &&
+    Date.now() - insertedAt > MEDIA_STALLED_AFTER_MS
+    ? "failed"
+    : status
+}
+
 export function toWhatsAppMessage(raw: RawMessage): WhatsAppMessage {
+  const media = raw.media
+    ? {
+        mimeType: raw.media.mimeType,
+        status: mediaStatus(raw),
+        size: raw.media.size ?? undefined,
+        seconds: raw.media.seconds ?? undefined,
+        voiceNote: raw.media.voiceNote ?? undefined,
+      }
+    : undefined
   return {
     id: String(raw._id),
     conversationId: String(raw.conversationId),
@@ -31,7 +61,11 @@ export function toWhatsAppMessage(raw: RawMessage): WhatsAppMessage {
     fromMe: raw.fromMe,
     status: (raw.status ??
       (raw.fromMe ? "SENT" : "RECEIVED")) as WhatsAppMessageStatus,
-    mediaUrl: raw.mediaUrl ?? undefined,
+    media,
+    mediaUrl:
+      media?.status === "stored"
+        ? whatsappMediaPath(String(raw._id))
+        : undefined,
     createdAt: raw.createdAt ?? raw.timestamp,
   }
 }
@@ -78,6 +112,16 @@ export const whatsappMessageRepository = {
             timestamp: message.timestamp,
             fromMe: message.fromMe,
             status: message.status,
+            ...(message.media
+              ? {
+                  media: {
+                    mimeType: message.media.mimeType,
+                    status: "pending" as const,
+                    seconds: message.media.seconds,
+                    voiceNote: message.media.voiceNote,
+                  },
+                }
+              : {}),
             createdAt: new Date(),
           },
         },
@@ -198,6 +242,49 @@ export const whatsappMessageRepository = {
       ordered: false,
     })
     return result.modifiedCount
+  },
+
+  /** Records where a message's file was stored. */
+  async setMediaStored(
+    whatsappMessageId: string,
+    stored: { storageKey: string; size: number; mimeType: string }
+  ): Promise<void> {
+    await connectToDatabase()
+    await WhatsAppMessageModel.updateOne(
+      { whatsappMessageId, media: { $exists: true } },
+      {
+        $set: {
+          "media.status": "stored",
+          "media.storageKey": stored.storageKey,
+          "media.size": stored.size,
+          "media.mimeType": stored.mimeType,
+        },
+      }
+    ).exec()
+  },
+
+  async setMediaFailed(whatsappMessageId: string): Promise<void> {
+    await connectToDatabase()
+    await WhatsAppMessageModel.updateOne(
+      { whatsappMessageId, "media.status": "pending" },
+      { $set: { "media.status": "failed" } }
+    ).exec()
+  },
+
+  /** Storage key and type of a message's file, when it has been stored. */
+  async findStoredMedia(
+    id: string
+  ): Promise<{ storageKey: string; mimeType: string } | null> {
+    await connectToDatabase()
+    if (!Types.ObjectId.isValid(id)) return null
+    const raw = await WhatsAppMessageModel.findById(id)
+      .select("media")
+      .lean<RawMessage>()
+      .exec()
+    const media = raw?.media
+    return media?.status === "stored" && media.storageKey
+      ? { storageKey: media.storageKey, mimeType: media.mimeType }
+      : null
   },
 
   async moveToConversation(fromId: string, toId: string): Promise<void> {

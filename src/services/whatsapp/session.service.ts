@@ -12,11 +12,14 @@ import {
   type WhatsAppSyncStats,
 } from "@/domain/whatsapp"
 import { getEnv } from "@/lib/env"
+import { getMediaStorage } from "@/lib/storage/media-storage"
 import type {
   WaBatch,
   WaBatchSource,
   WaClientHandlers,
   WaCloseReason,
+  WaMessage,
+  WaOutgoingMedia,
   WaOutreachStatus,
   WhatsAppClient,
   WhatsAppClientFactory,
@@ -32,6 +35,7 @@ import {
   type IngestResult,
 } from "@/services/whatsapp/ingest.service"
 import { findLeadByPhone } from "@/services/whatsapp/lead-matcher"
+import { storeMedia } from "@/services/whatsapp/media.service"
 import { advanceLeadStages } from "@/services/whatsapp/pipeline-automation"
 
 /**
@@ -89,7 +93,7 @@ type Runtime = {
  * dev hot reloads, so without this a client built by older code (missing a
  * new method) would stay in use until the server restarts.
  */
-const CLIENT_API_VERSION = 3
+const CLIENT_API_VERSION = 4
 
 // Shared across hot reloads and across the instrumentation/route bundles, so
 // there is never more than one socket for the session.
@@ -412,6 +416,21 @@ async function applyPipelineAutomation(result: IngestResult): Promise<void> {
   }
 }
 
+/**
+ * Fetches the files of new messages in the background: a slow download must
+ * not hold up the sync, and the chat refreshes when each batch lands.
+ */
+function storeMediaInBackground(result: IngestResult) {
+  if (result.media.length === 0) return
+  void storeMedia(result.media)
+    .then((conversationIds) => {
+      if (conversationIds.length > 0) {
+        emitWhatsAppEvent({ type: "conversations", conversationIds })
+      }
+    })
+    .catch((error) => console.error("[whatsapp] falha ao salvar mídias", error))
+}
+
 function handleBatch(batch: WaBatch, source: WaBatchSource) {
   enqueueSyncWork(async () => {
     const result = await ingestBatch(batch, source, {
@@ -419,6 +438,7 @@ function handleBatch(batch: WaBatch, source: WaBatchSource) {
     })
     // History is the past: only fresh activity moves leads on the board.
     if (source !== "history") await applyPipelineAutomation(result)
+    storeMediaInBackground(result)
 
     const sync = runtime.sync
     if (sync) {
@@ -593,7 +613,10 @@ async function startClient(): Promise<void> {
       includeGroups: config.includeGroups,
       getStoredMessage: async (id) => {
         const message = await whatsappMessageRepository.findByWhatsAppId(id)
-        return message?.fromMe ? message.body : undefined
+        // Only texts can be rebuilt from what is stored.
+        return message?.fromMe && message.type === "text"
+          ? message.body
+          : undefined
       },
     })
     runtime.clientVersion = CLIENT_API_VERSION
@@ -612,6 +635,64 @@ async function startClient(): Promise<void> {
       errorMessage(error, "Não foi possível iniciar o WhatsApp.")
     )
   }
+}
+
+/**
+ * The shared path of every send: checks the connection, sends, and stores
+ * the message right away without waiting for WhatsApp's echo.
+ */
+async function deliver(
+  conversationId: string,
+  send: (client: WhatsAppClient, chatJid: string) => Promise<WaMessage>,
+  options: { awaitMedia?: boolean } = {}
+): Promise<WhatsAppMessage> {
+  const conversation =
+    await whatsappConversationRepository.findById(conversationId)
+  if (!conversation)
+    throw new WhatsAppActionError("Conversa não encontrada.", 404)
+
+  await refreshStaleClient()
+  const client = runtime.client
+  if (!client || !isWhatsAppOnline(runtime.status)) {
+    throw new WhatsAppActionError(
+      "O WhatsApp não está conectado. Conecte para enviar mensagens.",
+      409
+    )
+  }
+
+  let sent: WaMessage
+  try {
+    sent = await send(client, conversation.whatsappChatId)
+  } catch (error) {
+    console.error("[whatsapp] falha ao enviar mensagem", error)
+    throw new WhatsAppActionError(
+      errorMessage(error, "Não foi possível enviar a mensagem."),
+      502
+    )
+  }
+
+  // The same message also comes back as an event; the unique id makes the
+  // second write a no-op.
+  const result = await enqueue(async () => {
+    const ingested = await ingestBatch(
+      { chats: [], contacts: [], messages: [sent] },
+      "live"
+    )
+    await applyPipelineAutomation(ingested)
+    return ingested
+  })
+  if (options.awaitMedia) await storeMedia(result.media)
+  else storeMediaInBackground(result)
+
+  // Replying means the conversation was read.
+  await whatsappConversationRepository.markRead(conversation.id)
+  log(`mensagem enviada (conversa ${conversation.id})`)
+  emitWhatsAppEvent({ type: "message", conversationId: conversation.id })
+
+  const stored = await whatsappMessageRepository.findByWhatsAppId(sent.id)
+  if (!stored)
+    throw new WhatsAppActionError("Mensagem enviada, mas não foi salva.", 500)
+  return stored
 }
 
 /** Waits while a (re)connection is still being set up. */
@@ -685,6 +766,8 @@ async function findWhatsAppJid(
 
 export type WhatsAppSnapshot = {
   enabled: boolean
+  /** Media storage is configured: files are shown and can be sent. */
+  mediaEnabled: boolean
   status: WhatsAppStatus
   qr?: string
   phoneNumber?: string
@@ -711,6 +794,7 @@ export const whatsappSessionService = {
 
     return {
       enabled: config.enabled,
+      mediaEnabled: getMediaStorage() !== null,
       status: runtime.status,
       qr: runtime.status === "QR_REQUIRED" ? runtime.qr : undefined,
       phoneNumber: runtime.phone ?? session?.phoneNumber,
@@ -804,53 +888,43 @@ export const whatsappSessionService = {
   },
 
   /** Sends a text and stores it right away, without waiting for the echo. */
-  async sendText(
-    conversationId: string,
-    text: string
-  ): Promise<WhatsAppMessage> {
-    const conversation =
-      await whatsappConversationRepository.findById(conversationId)
-    if (!conversation)
-      throw new WhatsAppActionError("Conversa não encontrada.", 404)
+  sendText(conversationId: string, text: string): Promise<WhatsAppMessage> {
+    return deliver(conversationId, (client, chatJid) =>
+      client.sendText(chatJid, text)
+    )
+  },
 
-    await refreshStaleClient()
-    const client = runtime.client
-    if (!client || !isWhatsAppOnline(runtime.status)) {
+  /**
+   * Sends an image or an audio. The file goes to storage before the call
+   * returns, so the chat can show it at once.
+   */
+  async sendMedia(
+    conversationId: string,
+    media: WaOutgoingMedia
+  ): Promise<WhatsAppMessage> {
+    if (!getMediaStorage()) {
       throw new WhatsAppActionError(
-        "O WhatsApp não está conectado. Conecte para enviar mensagens.",
+        "Configure o bucket S3 (AWS_S3_BUCKET) para enviar imagens e áudios.",
         409
       )
     }
-
-    let sent
-    try {
-      sent = await client.sendText(conversation.whatsappChatId, text)
-    } catch (error) {
-      console.error("[whatsapp] falha ao enviar mensagem", error)
-      throw new WhatsAppActionError(
-        errorMessage(error, "Não foi possível enviar a mensagem."),
-        502
-      )
-    }
-
-    // The same message also comes back as an event; the unique id makes the
-    // second write a no-op.
-    await enqueue(async () => {
-      const result = await ingestBatch(
-        { chats: [], contacts: [], messages: [sent] },
-        "live"
-      )
-      await applyPipelineAutomation(result)
-    })
-    // Replying means the conversation was read.
-    await whatsappConversationRepository.markRead(conversation.id)
-    log(`mensagem enviada (conversa ${conversation.id})`)
-    emitWhatsAppEvent({ type: "message", conversationId: conversation.id })
-
-    const stored = await whatsappMessageRepository.findByWhatsAppId(sent.id)
-    if (!stored)
-      throw new WhatsAppActionError("Mensagem enviada, mas não foi salva.", 500)
-    return stored
+    return deliver(
+      conversationId,
+      async (client, chatJid) => {
+        const sent = await client.sendMedia(chatJid, media)
+        // The file is already here; no need to fetch it back from WhatsApp.
+        return {
+          ...sent,
+          media: {
+            mimeType: media.mimeType,
+            voiceNote: media.kind === "audio" ? media.voiceNote : undefined,
+            ...sent.media,
+            download: async () => media.data,
+          },
+        }
+      },
+      { awaitMedia: true }
+    )
   },
 
   /** Connected and able to send right now. */

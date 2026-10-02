@@ -19,7 +19,12 @@ import type {
   WhatsAppMessageStatus,
   WhatsAppMessageType,
 } from "@/domain/whatsapp"
-import type { WaChat, WaContact, WaMessage } from "@/lib/whatsapp/client"
+import type {
+  WaChat,
+  WaContact,
+  WaMedia,
+  WaMessage,
+} from "@/lib/whatsapp/client"
 
 /**
  * Translates Baileys payloads into the CRM's shapes. Pure functions: no
@@ -84,9 +89,11 @@ export function statusFromAck(
   return (ack !== null && ack !== undefined && STATUS_BY_ACK[ack]) || "SENT"
 }
 
+type MediaInfo = Omit<WaMedia, "download">
+
 function describeContent(
   content: NonNullable<WAMessage["message"]>
-): { type: WhatsAppMessageType; body: string } | null {
+): { type: WhatsAppMessageType; body: string; media?: MediaInfo } | null {
   const kind = getContentType(content)
   if (!kind || IGNORED_CONTENT.has(kind)) return null
 
@@ -96,13 +103,27 @@ function describeContent(
     case "extendedTextMessage":
       return { type: "text", body: content.extendedTextMessage?.text ?? "" }
     case "imageMessage":
-      return { type: "image", body: content.imageMessage?.caption ?? "" }
+      return {
+        type: "image",
+        body: content.imageMessage?.caption ?? "",
+        media: { mimeType: content.imageMessage?.mimetype || "image/jpeg" },
+      }
     case "videoMessage":
       return { type: "video", body: content.videoMessage?.caption ?? "" }
     case "ptvMessage":
       return { type: "video", body: "" }
-    case "audioMessage":
-      return { type: "audio", body: "" }
+    case "audioMessage": {
+      const audio = content.audioMessage
+      return {
+        type: "audio",
+        body: "",
+        media: {
+          mimeType: audio?.mimetype || "audio/ogg",
+          seconds: audio?.seconds ?? undefined,
+          voiceNote: Boolean(audio?.ptt),
+        },
+      }
+    }
     case "documentMessage":
       return {
         type: "document",
@@ -112,7 +133,11 @@ function describeContent(
           "",
       }
     case "stickerMessage":
-      return { type: "sticker", body: "" }
+      return {
+        type: "sticker",
+        body: "",
+        media: { mimeType: content.stickerMessage?.mimetype || "image/webp" },
+      }
     case "locationMessage":
     case "liveLocationMessage":
       return { type: "location", body: "" }
@@ -131,10 +156,14 @@ function describeContent(
   }
 }
 
+/** Fetches a message's file; the socket supplies it, tests leave it out. */
+export type MediaDownloader = (message: WAMessage) => Promise<Buffer>
+
 /** Returns null for anything that is not a displayable message. */
 export function normalizeMessage(
   message: WAMessage,
-  meJid?: string
+  meJid?: string,
+  download?: MediaDownloader
 ): WaMessage | null {
   const key = message.key
   if (!key?.id || !key.remoteJid) return null
@@ -166,6 +195,10 @@ export function normalizeMessage(
     timestamp: seconds > 0 ? new Date(seconds * 1000) : new Date(),
     status: statusFromAck(message.status, fromMe),
     pushName: fromMe ? undefined : (message.pushName ?? undefined),
+    media:
+      described.media && download
+        ? { ...described.media, download: () => download(message) }
+        : undefined,
   }
 }
 

@@ -7,9 +7,23 @@ import {
 } from "mongoose"
 
 import {
+  WHATSAPP_MEDIA_STATUS,
   WHATSAPP_MESSAGE_STATUS,
   WHATSAPP_MESSAGE_TYPES,
 } from "@/domain/whatsapp"
+
+const mediaSchema = new Schema(
+  {
+    mimeType: { type: String, required: true },
+    status: { type: String, enum: WHATSAPP_MEDIA_STATUS, required: true },
+    /** Object key in the media bucket; set once the file is stored. */
+    storageKey: String,
+    size: Number,
+    seconds: Number,
+    voiceNote: Boolean,
+  },
+  { _id: false }
+)
 
 const whatsappMessageSchema = new Schema(
   {
@@ -30,7 +44,7 @@ const whatsappMessageSchema = new Schema(
     timestamp: { type: Date, required: true, index: true },
     fromMe: { type: Boolean, required: true },
     status: { type: String, enum: WHATSAPP_MESSAGE_STATUS },
-    mediaUrl: String,
+    media: { type: mediaSchema, default: undefined },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },

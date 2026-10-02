@@ -36,7 +36,22 @@ export type WaMessage = {
   status: WhatsAppMessageStatus
   /** Sender's profile name, used to name contacts we have never seen. */
   pushName?: string
+  /** Present for images, audio and stickers, whose file can be fetched. */
+  media?: WaMedia
 }
+
+export type WaMedia = {
+  mimeType: string
+  seconds?: number
+  voiceNote?: boolean
+  /** Fetches and decrypts the file from WhatsApp's servers. */
+  download: () => Promise<Buffer>
+}
+
+export type WaOutgoingMedia =
+  | { kind: "image"; data: Buffer; mimeType: string; caption?: string }
+  /** Audio must already be Ogg/Opus when sent as a voice note. */
+  | { kind: "audio"; data: Buffer; mimeType: string; voiceNote: boolean }
 
 /** One delivery of data from WhatsApp, in whatever mix it arrived. */
 export type WaBatch = {
@@ -91,6 +106,7 @@ export type WaOutreachStatus = {
 export interface WhatsAppClient {
   start(handlers: WaClientHandlers): Promise<void>
   sendText(chatJid: string, text: string): Promise<WaMessage>
+  sendMedia(chatJid: string, media: WaOutgoingMedia): Promise<WaMessage>
   /**
    * Asks WhatsApp whether a number (digits with country code) has an
    * account, returning its jid — which may differ from the digits, e.g. old

@@ -1,6 +1,7 @@
 import type {
   WaClientHandlers,
   WaMessage,
+  WaOutgoingMedia,
   WaOutreachStatus,
   WhatsAppClient,
 } from "@/lib/whatsapp/client"
@@ -10,6 +11,7 @@ export class FakeWhatsAppClient implements WhatsAppClient {
   handlers: WaClientHandlers | null = null
   starts = 0
   sent: { chatJid: string; text: string }[] = []
+  sentMedia: { chatJid: string; media: WaOutgoingMedia }[] = []
   loggedOut = false
   /** Numbers that "have WhatsApp", mapped to the jid WhatsApp answers with. */
   registered = new Map<string, string>()
@@ -46,6 +48,21 @@ export class FakeWhatsAppClient implements WhatsAppClient {
       to: chatJid,
       body: text,
       type: "text",
+      timestamp: new Date(),
+      status: "SENT",
+    }
+  }
+
+  async sendMedia(chatJid: string, media: WaOutgoingMedia): Promise<WaMessage> {
+    this.sentMedia.push({ chatJid, media })
+    return {
+      id: `sent-${(this.counter += 1)}`,
+      chatJid,
+      fromMe: true,
+      from: "5511000000000@s.whatsapp.net",
+      to: chatJid,
+      body: media.kind === "image" ? (media.caption ?? "") : "",
+      type: media.kind,
       timestamp: new Date(),
       status: "SENT",
     }

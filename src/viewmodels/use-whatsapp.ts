@@ -246,35 +246,70 @@ export function useMessages(id: string | null) {
   })
 }
 
-export function useSendMessage(conversationId: string) {
+/** Puts a just-sent message on screen and refreshes the inbox. */
+function useShowSentMessage(conversationId: string) {
   const queryClient = useQueryClient()
+  return (message: WhatsAppMessageDTO) => {
+    // Show it at once; the refetch below confirms it.
+    queryClient.setQueryData<InfiniteData<WhatsAppMessagesPageDTO>>(
+      whatsappKeys.messages(conversationId),
+      (data) => {
+        if (!data?.pages.length) return data
+        const [first, ...rest] = data.pages
+        if (first.items.some((item) => item.id === message.id)) return data
+        return {
+          ...data,
+          pages: [{ ...first, items: [message, ...first.items] }, ...rest],
+        }
+      }
+    )
+    void queryClient.invalidateQueries({
+      queryKey: whatsappKeys.conversations(),
+    })
+  }
+}
 
+export function useSendMessage(conversationId: string) {
+  const showSent = useShowSentMessage(conversationId)
   return useMutation({
     mutationFn: (text: string) =>
       apiFetch<WhatsAppMessageDTO>(
         `/api/whatsapp/conversations/${conversationId}/messages`,
         { method: "POST", body: JSON.stringify({ text }) }
       ),
-    onSuccess: (message) => {
-      // Show it at once; the refetch below confirms it.
-      queryClient.setQueryData<InfiniteData<WhatsAppMessagesPageDTO>>(
-        whatsappKeys.messages(conversationId),
-        (data) => {
-          if (!data?.pages.length) return data
-          const [first, ...rest] = data.pages
-          if (first.items.some((item) => item.id === message.id)) return data
-          return {
-            ...data,
-            pages: [{ ...first, items: [message, ...first.items] }, ...rest],
-          }
-        }
-      )
-      void queryClient.invalidateQueries({
-        queryKey: whatsappKeys.conversations(),
-      })
-    },
+    onSuccess: showSent,
     onError: (error: Error) => {
       toast.error("Mensagem não enviada", { description: error.message })
+    },
+  })
+}
+
+export type SendMediaInput = {
+  file: Blob
+  fileName?: string
+  /** Text shown under an image. */
+  caption?: string
+  /** Recorded in the CRM: goes as a voice message. */
+  voiceNote?: boolean
+}
+
+/** Sends an image or an audio; the server converts audio for WhatsApp. */
+export function useSendMedia(conversationId: string) {
+  const showSent = useShowSentMessage(conversationId)
+  return useMutation({
+    mutationFn: ({ file, fileName, caption, voiceNote }: SendMediaInput) => {
+      const form = new FormData()
+      form.set("file", file, fileName ?? "arquivo")
+      if (caption) form.set("caption", caption)
+      if (voiceNote) form.set("voiceNote", "true")
+      return apiFetch<WhatsAppMessageDTO>(
+        `/api/whatsapp/conversations/${conversationId}/media`,
+        { method: "POST", body: form }
+      )
+    },
+    onSuccess: showSent,
+    onError: (error: Error) => {
+      toast.error("Arquivo não enviado", { description: error.message })
     },
   })
 }

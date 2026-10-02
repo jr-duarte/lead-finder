@@ -61,7 +61,7 @@ export const WHATSAPP_MESSAGE_TYPES = [
 
 export type WhatsAppMessageType = (typeof WHATSAPP_MESSAGE_TYPES)[number]
 
-/** Shown in place of a body for media, which v1 does not download. */
+/** Shown in place of a body for media that is not (or not yet) stored. */
 export const WHATSAPP_MEDIA_PLACEHOLDERS: Record<WhatsAppMessageType, string> =
   {
     text: "",
@@ -74,6 +74,70 @@ export const WHATSAPP_MEDIA_PLACEHOLDERS: Record<WhatsAppMessageType, string> =
     contact: "[contato]",
     other: "[mensagem não suportada]",
   }
+
+/** Media kinds whose files are downloaded, stored and shown in the chat. */
+export const WHATSAPP_STORED_MEDIA_TYPES = [
+  "image",
+  "audio",
+  "sticker",
+] as const
+
+export function isStoredMediaType(type: WhatsAppMessageType): boolean {
+  return (WHATSAPP_STORED_MEDIA_TYPES as readonly string[]).includes(type)
+}
+
+/**
+ * - "pending": known to have a file that is not in storage yet.
+ * - "stored": the file is in storage and can be shown.
+ * - "failed": WhatsApp no longer had it, or the upload failed.
+ */
+export const WHATSAPP_MEDIA_STATUS = ["pending", "stored", "failed"] as const
+export type WhatsAppMediaStatus = (typeof WHATSAPP_MEDIA_STATUS)[number]
+
+export type WhatsAppMessageMedia = {
+  mimeType: string
+  status: WhatsAppMediaStatus
+  /** Bytes, once stored. */
+  size?: number
+  /** Audio length, when WhatsApp reports it. */
+  seconds?: number
+  /** Recorded as a voice note rather than sent as an audio file. */
+  voiceNote?: boolean
+}
+
+/** Image types WhatsApp shows inline when sent as a photo. */
+export const WHATSAPP_SENDABLE_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const
+
+/** Which kind of message an uploaded file becomes, or null if unsupported. */
+export function outgoingMediaKind(mimeType: string): "image" | "audio" | null {
+  const type = mimeType.split(";")[0].trim().toLowerCase()
+  if ((WHATSAPP_SENDABLE_IMAGE_TYPES as readonly string[]).includes(type))
+    return "image"
+  if (type.startsWith("audio/") || type === "video/webm") return "audio"
+  return null
+}
+
+/** File extension for a stored object, from its mime type. */
+export function mediaExtension(mimeType: string): string {
+  const type = mimeType.split(";")[0].trim().toLowerCase()
+  const known: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "audio/ogg": "ogg",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/aac": "aac",
+    "audio/webm": "webm",
+    "audio/wav": "wav",
+  }
+  return known[type] ?? (type.split("/")[1]?.replace(/[^\w]/g, "") || "bin")
+}
 
 /**
  * Delivery state. Incoming messages are "RECEIVED"; outgoing ones climb from
@@ -152,6 +216,8 @@ export type WhatsAppMessage = {
   timestamp: Date
   fromMe: boolean
   status: WhatsAppMessageStatus
+  media?: WhatsAppMessageMedia
+  /** Where the browser loads the file from; only once it is stored. */
   mediaUrl?: string
   createdAt: Date
 }
