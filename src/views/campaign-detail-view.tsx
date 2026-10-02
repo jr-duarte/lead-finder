@@ -8,6 +8,7 @@ import {
   Pause,
   Play,
   RotateCcw,
+  Undo2,
   WifiOff,
   XCircle,
 } from "lucide-react"
@@ -33,11 +34,19 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
-import { isCampaignOpen, type CampaignStatus } from "@/domain/campaign"
+import {
+  canReopenCampaign,
+  isCampaignOpen,
+  type CampaignStatus,
+} from "@/domain/campaign"
 import { isWhatsAppOnline, type WhatsAppStatus } from "@/domain/whatsapp"
 import { formatDateTime } from "@/lib/format"
 import type { CampaignDTO } from "@/types/api"
-import { useCampaign, useCampaignAction } from "@/viewmodels/use-campaigns"
+import {
+  useCampaign,
+  useCampaignAction,
+  useReopenCampaign,
+} from "@/viewmodels/use-campaigns"
 import { useWhatsAppStatus } from "@/viewmodels/use-whatsapp"
 
 function Counter({ label, value }: { label: string; value: number }) {
@@ -89,6 +98,7 @@ function Actions({ campaign }: { campaign: CampaignDTO }) {
     "Leads com falha voltaram para a fila."
   )
 
+  if (canReopenCampaign(status)) return <ReopenAction campaign={campaign} />
   if (!isCampaignOpen(status)) return null
 
   return (
@@ -158,6 +168,41 @@ function Actions({ campaign }: { campaign: CampaignDTO }) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+/** The one action an ended campaign has: bringing it back, paused. */
+function ReopenAction({ campaign }: { campaign: CampaignDTO }) {
+  const reopen = useReopenCampaign(campaign.id)
+  const cancelled = campaign.status === "CANCELLED"
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" disabled={reopen.isPending}>
+          <Undo2 className="size-4" />
+          Reabrir campanha
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Reabrir a campanha?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Ela volta pausada: nada é enviado até você clicar em Retomar envio.
+            {cancelled
+              ? " Os leads liberados pelo cancelamento voltam para revisão, menos os que foram contatados ou entraram em outra campanha nesse meio tempo."
+              : " Você pode adicionar leads novos e continuar de onde parou."}{" "}
+            Mensagens já enviadas não são reenviadas.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Voltar</AlertDialogCancel>
+          <AlertDialogAction onClick={() => reopen.mutate()}>
+            Reabrir
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 

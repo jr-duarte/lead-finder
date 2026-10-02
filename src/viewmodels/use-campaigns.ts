@@ -152,6 +152,41 @@ export function useCampaignAction(
   })
 }
 
+export type ReopenCampaignDTO = {
+  campaign: CampaignDTO
+  restored: number
+  blocked: { businessName: string; reason: string }[]
+}
+
+/** Reopens an ended campaign, paused, and says which leads came back. */
+export function useReopenCampaign(id: string) {
+  const invalidate = useInvalidate()
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<ReopenCampaignDTO>(`/api/campaigns/${id}/reopen`, {
+        method: "POST",
+      }),
+    onSuccess: ({ restored, blocked }) => {
+      const parts = [
+        restored > 0
+          ? `${restored} lead(s) voltaram para revisão.`
+          : "Nenhum lead pendente para voltar.",
+        blocked.length > 0
+          ? `${blocked.length} não voltaram: ${blocked
+              .slice(0, 3)
+              .map((item) => `${item.businessName} (${item.reason})`)
+              .join("; ")}${blocked.length > 3 ? "…" : ""}`
+          : null,
+      ].filter(Boolean)
+      toast.success("Campanha reaberta e pausada.", {
+        description: parts.join(" "),
+      })
+      void invalidate()
+    },
+    onError: onError("Não foi possível reabrir"),
+  })
+}
+
 export function useUpdateCampaignItem(campaignId: string) {
   const invalidate = useInvalidate()
   return useMutation({

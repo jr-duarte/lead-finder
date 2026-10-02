@@ -37,6 +37,17 @@ export function isCampaignOpen(status: CampaignStatus): boolean {
   return OPEN_CAMPAIGN_STATUSES.includes(status)
 }
 
+/** Ended campaigns that can be brought back. */
+export function canReopenCampaign(status: CampaignStatus): boolean {
+  return status === "DONE" || status === "CANCELLED"
+}
+
+/**
+ * Reason given to leads skipped because their campaign was cancelled; a
+ * reopen brings exactly these back, never leads the user skipped by hand.
+ */
+export const CANCELLED_ITEM_REASON = "Pulado porque a campanha foi cancelada."
+
 export const CAMPAIGN_ITEM_STATUS = [
   /** Waiting for its approach to be written. */
   "PENDING",

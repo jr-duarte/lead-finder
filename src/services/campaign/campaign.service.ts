@@ -1,5 +1,7 @@
 import { hasOffer } from "@/domain/approach"
 import {
+  CANCELLED_ITEM_REASON,
+  canReopenCampaign,
   DEFAULT_SEND_WINDOW,
   timeZoneForCountries,
   FINAL_ITEM_STATUSES,
@@ -38,6 +40,14 @@ export type AddLeadsResult = {
   added: number
   /** Leads left out, with the reason, so the UI can explain. */
   rejected: LeadCheck[]
+}
+
+export type ReopenResult = {
+  campaign: Campaign
+  /** Leads released by the cancel that are back in the campaign. */
+  restored: number
+  /** Leads that could not come back, with the reason. */
+  blocked: { businessName: string; reason: string }[]
 }
 
 export type CampaignDetail = {
@@ -344,8 +354,76 @@ export const campaignService = {
       { status: "CANCELLED", nextSendAt: undefined }
     )
     const open: CampaignItemStatus[] = ["PENDING", "READY", "APPROVED"]
-    await campaignRepository.transitionItems(id, open, "SKIPPED")
+    await campaignRepository.transitionItems(
+      id,
+      open,
+      "SKIPPED",
+      CANCELLED_ITEM_REASON
+    )
     return requireCampaign(id)
+  },
+
+  /**
+   * Brings a finished or cancelled campaign back, paused: nothing is sent
+   * until the user starts it again. Leads the cancel released come back for
+   * review, unless they were contacted or joined another campaign since.
+   * Leads skipped by hand stay skipped, and sent messages stay sent.
+   */
+  async reopen(id: string): Promise<ReopenResult> {
+    const campaign = await requireCampaign(id)
+    if (!canReopenCampaign(campaign.status)) {
+      throw new CampaignError("Esta campanha já está aberta.", 409)
+    }
+
+    const reopened = await campaignRepository.transition(
+      id,
+      ["DONE", "CANCELLED"],
+      {
+        status: "PAUSED",
+        pauseReason: "Reaberta. Revise os leads e clique em Iniciar.",
+        waitReason: undefined,
+        nextSendAt: undefined,
+        consecutiveFailures: 0,
+      }
+    )
+    if (!reopened) {
+      throw new CampaignError("Esta campanha já está aberta.", 409)
+    }
+
+    const released = (await campaignRepository.listItems(id)).filter(
+      (item) =>
+        item.status === "SKIPPED" && item.reason === CANCELLED_ITEM_REASON
+    )
+    // Skipped items do not count as "in a campaign": any campaign a check
+    // names is another one.
+    const checks = new Map(
+      (await checkLeads(released.map((item) => item.businessId))).map(
+        (check) => [check.businessId, check]
+      )
+    )
+
+    let restored = 0
+    let needsMessage = false
+    const blocked: ReopenResult["blocked"] = []
+    for (const item of released) {
+      const reason = checks.get(item.businessId)?.reason
+      if (reason) {
+        blocked.push({ businessName: item.businessName, reason })
+        await campaignRepository.updateItem(item.id, {
+          reason: `Não voltou ao reabrir: ${reason}`,
+        })
+        continue
+      }
+      await campaignRepository.updateItem(item.id, {
+        status: item.message ? "READY" : "PENDING",
+        reason: undefined,
+      })
+      if (!item.message) needsMessage = true
+      restored += 1
+    }
+    if (needsMessage) campaignGenerator.kick()
+
+    return { campaign: await requireCampaign(id), restored, blocked }
   },
 
   /** Edits, approves or skips one lead before it is sent. */

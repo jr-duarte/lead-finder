@@ -304,12 +304,13 @@ export const campaignRepository = {
   async transitionItems(
     campaignId: string,
     from: CampaignItemStatus[],
-    to: CampaignItemStatus
+    to: CampaignItemStatus,
+    reason?: string
   ): Promise<number> {
     await connectToDatabase()
     const result = await CampaignItemModel.updateMany(
       { campaignId, status: { $in: from } },
-      { $set: { status: to } }
+      { $set: { status: to, ...(reason !== undefined ? { reason } : {}) } }
     ).exec()
     return result.modifiedCount
   },

@@ -684,3 +684,86 @@ describe("respostas, cancelamento e recuperação", () => {
     expect(list[1]?.reason).toMatch(/interrompido/)
   })
 })
+
+describe("reabrir campanha", () => {
+  async function approvedCampaign(names: string[]) {
+    const ids: string[] = []
+    for (const [index, name] of names.entries()) {
+      const digits = `551198888000${index}`
+      ids.push(await seedLead(name, `+${digits}`))
+      hasWhatsApp(digits)
+    }
+    const { campaign } = await campaignService.create({
+      name: "Reabrir",
+      businessIds: ids,
+      intervalMinutes: 10,
+    })
+    await waitForGeneration(campaign.id)
+    await campaignService.approveAll(campaign.id)
+    return { campaignId: campaign.id, ids }
+  }
+
+  it("volta pausada e devolve à revisão os leads liberados pelo cancelamento", async () => {
+    const { campaignId } = await approvedCampaign(["A", "B", "C"])
+    const [, , skippedByHand] = await items(campaignId)
+    await campaignService.updateItem(campaignId, skippedByHand.id, {
+      status: "SKIPPED",
+    })
+    await campaignService.cancel(campaignId)
+
+    const result = await campaignService.reopen(campaignId)
+
+    expect(result.campaign.status).toBe("PAUSED")
+    expect(result.restored).toBe(2)
+    expect(result.blocked).toEqual([])
+    const after = await items(campaignId)
+    // Back for review, never straight into the send queue.
+    expect(after.map((item) => item.status)).toEqual([
+      "READY",
+      "READY",
+      "SKIPPED",
+    ])
+    expect(after[0].reason).toBeUndefined()
+  })
+
+  it("lead que entrou em outra campanha não volta, e o motivo fica registrado", async () => {
+    const { campaignId, ids } = await approvedCampaign(["A", "B"])
+    await campaignService.cancel(campaignId)
+    const other = await campaignService.create({
+      name: "Outra",
+      businessIds: [ids[0]],
+      intervalMinutes: 10,
+    })
+    await waitForGeneration(other.campaign.id)
+
+    const result = await campaignService.reopen(campaignId)
+
+    expect(result.restored).toBe(1)
+    expect(result.blocked).toHaveLength(1)
+    expect(result.blocked[0].businessName).toBe("A")
+    const [a, b] = await items(campaignId)
+    expect(a.status).toBe("SKIPPED")
+    expect(a.reason).toMatch(/^Não voltou ao reabrir:/)
+    expect(b.status).toBe("READY")
+  })
+
+  it("campanha concluída reabre pausada e aceita leads novos", async () => {
+    const { campaignId } = await approvedCampaign(["A"])
+    await CampaignModel.updateOne({ _id: campaignId }, { status: "DONE" })
+
+    const result = await campaignService.reopen(campaignId)
+    expect(result.campaign.status).toBe("PAUSED")
+
+    const extra = await seedLead("Novo", "+5511988880009")
+    hasWhatsApp("5511988880009")
+    const added = await campaignService.addLeads(campaignId, [extra])
+    expect(added.added).toBe(1)
+  })
+
+  it("recusa reabrir campanha que já está aberta", async () => {
+    const { campaignId } = await approvedCampaign(["A"])
+    await expect(campaignService.reopen(campaignId)).rejects.toMatchObject({
+      status: 409,
+    })
+  })
+})
