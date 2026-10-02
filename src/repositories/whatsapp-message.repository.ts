@@ -330,6 +330,23 @@ export const whatsappMessageRepository = {
       : null
   },
 
+  /** Which of these conversations have at least one stored message. */
+  async conversationsWithMessages(
+    conversationIds: string[]
+  ): Promise<Set<string>> {
+    await connectToDatabase()
+    if (conversationIds.length === 0) return new Set()
+    const ids: Types.ObjectId[] = await WhatsAppMessageModel.distinct(
+      "conversationId",
+      {
+        conversationId: {
+          $in: conversationIds.map((id) => new Types.ObjectId(id)),
+        },
+      }
+    ).exec()
+    return new Set(ids.map(String))
+  },
+
   async moveToConversation(fromId: string, toId: string): Promise<void> {
     await connectToDatabase()
     await WhatsAppMessageModel.updateMany(

@@ -5,10 +5,13 @@ import makeWASocket, {
   DisconnectReason,
   downloadMediaMessage,
   fetchLatestBaileysVersion,
+  isLidUser,
+  isPnUser,
   jidNormalizedUser,
   // Not a React hook despite the name; aliased so the hooks lint rule agrees.
   useMultiFileAuthState as loadMultiFileAuthState,
   type AnyMessageContent,
+  type Chat,
   type WAMessage,
   type WASocket,
 } from "baileys"
@@ -168,6 +171,61 @@ export function createBaileysClient(
       const normalize = (message: WAMessage) =>
         normalizeMessage(message, me(), download)
 
+      /**
+       * A message addressed by LID often carries the phone jid alongside.
+       * Each pair teaches the CRM that both are one person, so a chat known
+       * only by its LID is merged into the conversation by phone.
+       */
+      const learnLidMappings = (messages: WAMessage[]) => {
+        const seen = new Set<string>()
+        for (const { key } of messages) {
+          const pairs: [unknown, unknown][] = [
+            [key?.remoteJid, key?.remoteJidAlt],
+            [key?.participant, key?.participantAlt],
+          ]
+          for (const [lid, pn] of pairs) {
+            if (typeof lid !== "string" || typeof pn !== "string") continue
+            if (!isLidUser(lid) || !isPnUser(pn)) continue
+            const normalizedLid = jidNormalizedUser(lid)
+            if (seen.has(normalizedLid)) continue
+            seen.add(normalizedLid)
+            handlers.onLidMapping({
+              lid: normalizedLid,
+              pnJid: jidNormalizedUser(pn),
+            })
+          }
+        }
+      }
+
+      /**
+       * Chat events may name a person only by LID. The phone jid, when
+       * Baileys knows it, keeps them from becoming a second conversation.
+       */
+      const withPhoneJids = (chats: Partial<Chat>[]) =>
+        Promise.all(
+          chats.map(async (chat) => {
+            if (!chat.id || chat.pnJid || !isLidUser(chat.id)) return chat
+            const pn = await sock.signalRepository.lidMapping
+              .getPNForLID(chat.id)
+              .catch(() => null)
+            return pn && isPnUser(pn)
+              ? { ...chat, pnJid: jidNormalizedUser(pn) }
+              : chat
+          })
+        )
+      const emitChats = async (chats: Partial<Chat>[]) => {
+        const resolved = await withPhoneJids(chats)
+        emitBatch(
+          handlers,
+          {
+            chats: compact(resolved.map(normalizeChat)),
+            contacts: [],
+            messages: [],
+          },
+          "live"
+        )
+      }
+
       sock.ev.on("creds.update", saveCreds)
 
       sock.ev.on("connection.update", (update) => {
@@ -212,6 +270,7 @@ export function createBaileysClient(
             pnJid: toPnJid(mapping.pn),
           })
         }
+        learnLidMappings(history.messages)
         emitBatch(
           handlers,
           {
@@ -224,6 +283,7 @@ export function createBaileysClient(
       })
 
       sock.ev.on("messages.upsert", ({ messages, type }) => {
+        learnLidMappings(messages)
         emitBatch(
           handlers,
           {
@@ -235,29 +295,8 @@ export function createBaileysClient(
         )
       })
 
-      sock.ev.on("chats.upsert", (chats) => {
-        emitBatch(
-          handlers,
-          {
-            chats: compact(chats.map(normalizeChat)),
-            contacts: [],
-            messages: [],
-          },
-          "live"
-        )
-      })
-
-      sock.ev.on("chats.update", (chats) => {
-        emitBatch(
-          handlers,
-          {
-            chats: compact(chats.map(normalizeChat)),
-            contacts: [],
-            messages: [],
-          },
-          "live"
-        )
-      })
+      sock.ev.on("chats.upsert", (chats) => void emitChats(chats))
+      sock.ev.on("chats.update", (chats) => void emitChats(chats))
 
       const onContacts = (contacts: Parameters<typeof normalizeContact>[0][]) =>
         emitBatch(

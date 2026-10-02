@@ -525,6 +525,69 @@ describe("iniciar conversa por número", () => {
   })
 })
 
+describe("duplicatas por LID", () => {
+  it("a sincronização remove a conversa vazia aberta por LID", async () => {
+    // Left behind by older versions: same person, empty, keyed by LID.
+    const contact = await WhatsAppContactModel.create({
+      whatsappId: "262332861120687@lid",
+      pushName: "João",
+    })
+    await WhatsAppConversationModel.create({
+      contactId: contact._id,
+      whatsappChatId: "262332861120687@lid",
+      title: "João",
+      unreadCount: 1,
+    })
+
+    await connectAndSync([incoming("m1", "Oi", "2026-10-01T09:30:00Z")])
+    await until(
+      async () =>
+        (await WhatsAppConversationModel.countDocuments({
+          whatsappChatId: /@lid$/,
+        })) === 0
+    )
+    const left = await WhatsAppConversationModel.find()
+    expect(left.map((item) => item.whatsappChatId)).toEqual([JOAO])
+  })
+
+  it("aprende o número do LID pela mensagem e unifica", async () => {
+    await connectAndSync([incoming("m1", "Oi", "2026-10-01T09:30:00Z")])
+    const contact = await WhatsAppContactModel.create({
+      whatsappId: "777@lid",
+      pushName: "João",
+    })
+    const lidConversation = await WhatsAppConversationModel.create({
+      contactId: contact._id,
+      whatsappChatId: "777@lid",
+      title: "João",
+      unreadCount: 0,
+    })
+    await WhatsAppMessageModel.create({
+      conversationId: lidConversation._id,
+      whatsappMessageId: "by-lid",
+      from: "777@lid",
+      to: "me",
+      body: "mandei pelo lid",
+      timestamp: new Date("2026-10-01T09:00:00Z"),
+      fromMe: false,
+    })
+
+    client.on.onLidMapping({ lid: "777@lid", pnJid: JOAO })
+    await until(
+      async () =>
+        (await WhatsAppConversationModel.countDocuments({
+          whatsappChatId: "777@lid",
+        })) === 0
+    )
+    const joao = await WhatsAppConversationModel.findOne({
+      whatsappChatId: JOAO,
+    })
+    expect(
+      await WhatsAppMessageModel.countDocuments({ conversationId: joao?._id })
+    ).toBe(2)
+  })
+})
+
 describe("hot reload em desenvolvimento", () => {
   it("troca um cliente criado por código antigo, sem pedir QR Code", async () => {
     const businessId = await seedLead()

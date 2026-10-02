@@ -34,6 +34,10 @@ export type IngestOptions = {
   historySince?: Date
 }
 
+function isLidJid(jid: string): boolean {
+  return jid.endsWith("@lid")
+}
+
 function phoneFromJid(jid: string): string | undefined {
   const match = /^(\d+)@s\.whatsapp\.net$/.exec(jid)
   return match?.[1]
@@ -116,7 +120,17 @@ export async function ingestBatch(
 
   const chatJids = new Set<string>(messages.map((message) => message.chatJid))
   for (const chat of batch.chats) {
-    if ((chat.unreadCount ?? 0) > 0) chatJids.add(chat.jid)
+    if ((chat.unreadCount ?? 0) <= 0 || chatJids.has(chat.jid)) continue
+    // A chat known only by LID is usually someone whose messages arrive
+    // under their phone number: opening it here would duplicate them as an
+    // empty conversation. It becomes a conversation once a message comes.
+    if (isLidJid(chat.jid)) {
+      const existing = await whatsappConversationRepository.findByChatJid(
+        chat.jid
+      )
+      if (!existing) continue
+    }
+    chatJids.add(chat.jid)
   }
   const chatNames = new Map(
     batch.chats.flatMap((chat) => (chat.name ? [[chat.jid, chat.name]] : []))

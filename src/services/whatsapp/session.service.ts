@@ -84,6 +84,8 @@ type Runtime = {
   reconnectTimer?: ReturnType<typeof setTimeout>
   /** Set while we close the socket on purpose. */
   stopping: boolean
+  /** LID → phone jid pairs already merged in this process. */
+  lidMappings?: Map<string, string>
   /** CLIENT_API_VERSION of the code that created `client`. */
   clientVersion?: number
   /** Present while a stale client is being replaced. */
@@ -95,7 +97,7 @@ type Runtime = {
  * dev hot reloads, so without this a client built by older code (missing a
  * new method) would stay in use until the server restarts.
  */
-const CLIENT_API_VERSION = 4
+const CLIENT_API_VERSION = 5
 
 // Shared across hot reloads and across the instrumentation/route bundles, so
 // there is never more than one socket for the session.
@@ -146,6 +148,7 @@ export function resetWhatsAppRuntime(): void {
     stopping: false,
     clientVersion: undefined,
     swapping: undefined,
+    lidMappings: undefined,
   } satisfies Runtime)
 }
 
@@ -362,6 +365,18 @@ async function finishSync(): Promise<void> {
     }
   } catch (error) {
     console.error("[whatsapp] falha ao registrar a sincronização", error)
+  }
+
+  // Leftovers of chats WhatsApp named only by LID, now or in older syncs.
+  const removed = await enqueue(() =>
+    whatsappConversationRepository.removeEmptyLidConversations()
+  ).catch((error) => {
+    console.error("[whatsapp] falha ao limpar conversas duplicadas", error)
+    return 0
+  })
+  if (removed > 0) {
+    log(`${removed} conversa(s) vazia(s) duplicada(s) por LID removida(s)`)
+    emitWhatsAppEvent({ type: "conversations", conversationIds: [] })
   }
 
   if (isWhatsAppOnline(runtime.status)) setStatus("READY")
@@ -581,6 +596,10 @@ function handlers(): WaClientHandlers {
         )
     },
     onLidMapping: ({ lid, pnJid }) => {
+      // Every message by LID repeats its mapping; merging once is enough.
+      if (runtime.lidMappings?.get(lid) === pnJid) return
+      runtime.lidMappings ??= new Map()
+      runtime.lidMappings.set(lid, pnJid)
       void enqueue(() =>
         whatsappConversationRepository.mergeLid(
           lid,

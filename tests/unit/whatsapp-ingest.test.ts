@@ -346,6 +346,73 @@ describe("ingestBatch", () => {
   })
 })
 
+describe("conversas duplicadas por LID", () => {
+  const LID = "262332861120687@lid"
+
+  it("aviso de chat só com LID e sem mensagem não abre conversa vazia", async () => {
+    // The reply is stored under the phone number...
+    await ingestBatch(batch({ messages: [message({ id: "r1" })] }), "live")
+    // ...while WhatsApp reports the unread chat only by LID.
+    const result = await ingestBatch(
+      batch({ chats: [{ jid: LID, name: "Julia", unreadCount: 1 }] }),
+      "live"
+    )
+
+    expect(result.conversationIds).toEqual([])
+    const conversations = await WhatsAppConversationModel.find()
+    expect(conversations.map((item) => item.whatsappChatId)).toEqual([JOAO])
+  })
+
+  it("a conversa por LID nasce quando chega mensagem por ela", async () => {
+    await ingestBatch(batch({ chats: [{ jid: LID, unreadCount: 1 }] }), "live")
+    expect(await WhatsAppConversationModel.countDocuments()).toBe(0)
+
+    await ingestBatch(
+      batch({
+        messages: [message({ id: "l1", chatJid: LID, from: LID })],
+      }),
+      "live"
+    )
+    expect(
+      await WhatsAppConversationModel.countDocuments({ whatsappChatId: LID })
+    ).toBe(1)
+  })
+
+  it("limpa só as conversas por LID vazias e sem lead", async () => {
+    const leadId = await seedBusiness("Padaria", "(21) 98888-7777")
+    await ingestBatch(
+      batch({
+        messages: [
+          message({ id: "keep", chatJid: "111@lid", from: "111@lid" }),
+          message({ id: "pn" }),
+        ],
+      }),
+      "live"
+    )
+    const contact = await whatsappConversationRepository.upsertContact({
+      jid: "222@lid",
+    })
+    await whatsappConversationRepository.ensureConversation("222@lid", contact)
+    const linkedContact = await whatsappConversationRepository.upsertContact({
+      jid: "333@lid",
+    })
+    const { conversation: linked } =
+      await whatsappConversationRepository.ensureConversation(
+        "333@lid",
+        linkedContact
+      )
+    await whatsappConversationRepository.setLead(linked.id, leadId, "manual")
+
+    expect(
+      await whatsappConversationRepository.removeEmptyLidConversations()
+    ).toBe(1)
+    const left = (await WhatsAppConversationModel.find())
+      .map((item) => item.whatsappChatId)
+      .sort()
+    expect(left).toEqual(["111@lid", "333@lid", JOAO].sort())
+  })
+})
+
 describe("vínculo com Lead", () => {
   it("vincula automaticamente quando um único lead tem o telefone", async () => {
     const businessId = await seedBusiness("Padaria XYZ", "(11) 99999-8888")

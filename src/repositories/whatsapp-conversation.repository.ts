@@ -383,6 +383,39 @@ export const whatsappConversationRepository = {
    * the LID moves to the phone-number jid, merging into an existing
    * conversation when there is one, so one person never shows up twice.
    */
+  /**
+   * Deletes conversations opened under a LID that never got a message and
+   * belong to no lead: leftovers of chat events for people whose messages
+   * live in their conversation by phone. Returns how many were removed.
+   */
+  async removeEmptyLidConversations(): Promise<number> {
+    await connectToDatabase()
+    const candidates = await WhatsAppConversationModel.find({
+      whatsappChatId: /@lid$/,
+      businessId: null,
+    })
+      .select("_id")
+      .lean<{ _id: Types.ObjectId }[]>()
+      .exec()
+    if (candidates.length === 0) return 0
+
+    const withMessages =
+      await whatsappMessageRepository.conversationsWithMessages(
+        candidates.map((item) => String(item._id))
+      )
+    const empty = candidates.filter(
+      (item) => !withMessages.has(String(item._id))
+    )
+    if (empty.length === 0) return 0
+
+    const result = await WhatsAppConversationModel.deleteMany({
+      _id: { $in: empty.map((item) => item._id) },
+      // Re-checked here in case a lead was linked meanwhile.
+      businessId: null,
+    }).exec()
+    return result.deletedCount
+  },
+
   async mergeLid(lid: string, pnJid: string, phone?: string): Promise<boolean> {
     await connectToDatabase()
     if (lid === pnJid) return false
