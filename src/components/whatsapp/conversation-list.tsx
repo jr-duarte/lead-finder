@@ -16,6 +16,7 @@ import { ErrorState } from "@/components/common/error-state"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ContactAvatar } from "@/components/whatsapp/contact-avatar"
 import { NewConversationDialog } from "@/components/whatsapp/new-conversation-dialog"
 import { formatWhatsAppPhone } from "@/domain/whatsapp"
 import type { WhatsAppConversationDTO } from "@/types/api"
@@ -55,34 +56,40 @@ function ConversationItem({
       onClick={onSelect}
       aria-current={selected ? "true" : undefined}
       className={cn(
-        "hover:bg-muted/60 flex w-full flex-col gap-1 rounded-md px-3 py-2.5 text-left transition-colors",
+        "hover:bg-muted/60 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors",
         selected && "bg-muted"
       )}
     >
-      <div className="flex items-center gap-2">
-        <span className="truncate font-medium">{conversation.title}</span>
-        {conversation.businessId ? (
-          <Briefcase
-            className="text-primary size-3.5 shrink-0"
-            aria-label="Vinculada a um lead"
-          />
-        ) : null}
-        <span className="text-muted-foreground tabular ml-auto shrink-0 text-xs">
-          {shortTime(conversation.lastMessageAt)}
-        </span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-muted-foreground truncate text-sm">
-          {conversation.lastMessageFromMe ? "Você: " : ""}
-          {conversation.lastMessage ||
-            formatWhatsAppPhone(conversation.phone) ||
-            "Sem mensagens"}
-        </span>
-        {conversation.unreadCount > 0 ? (
-          <span className="bg-success text-success-foreground ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-medium">
-            {conversation.unreadCount}
+      <ContactAvatar
+        conversationId={conversation.id}
+        name={conversation.title}
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-medium">{conversation.title}</span>
+          {conversation.businessId ? (
+            <Briefcase
+              className="text-primary size-3.5 shrink-0"
+              aria-label="Vinculada a um lead"
+            />
+          ) : null}
+          <span className="text-muted-foreground tabular ml-auto shrink-0 text-xs">
+            {shortTime(conversation.lastMessageAt)}
           </span>
-        ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground truncate text-sm">
+            {conversation.lastMessageFromMe ? "Você: " : ""}
+            {conversation.lastMessage ||
+              formatWhatsAppPhone(conversation.phone) ||
+              "Sem mensagens"}
+          </span>
+          {conversation.unreadCount > 0 ? (
+            <span className="bg-success text-success-foreground ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-medium">
+              {conversation.unreadCount}
+            </span>
+          ) : null}
+        </div>
       </div>
     </button>
   )

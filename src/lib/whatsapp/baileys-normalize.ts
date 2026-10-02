@@ -275,5 +275,7 @@ export function normalizeContact(contact: Partial<Contact>): WaContact | null {
     phone: phoneFromJid(jid),
     name: contact.name ?? undefined,
     pushName: contact.notify ?? undefined,
+    // "changed"/"removed" from a picture notification; null from a sync.
+    pictureChanged: contact.imgUrl !== undefined || undefined,
   }
 }

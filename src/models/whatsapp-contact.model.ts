@@ -15,7 +15,10 @@ const whatsappContactSchema = new Schema(
     phone: { type: String, index: true },
     name: { type: String, trim: true },
     pushName: { type: String, trim: true },
+    /** Last known picture link from WhatsApp; it expires (see avatar service). */
     profilePicture: String,
+    /** When the picture was last asked for; unset means "ask again". */
+    profilePictureCheckedAt: Date,
   },
   { timestamps: true, collection: "whatsapp_contacts" }
 )

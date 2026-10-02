@@ -225,6 +225,7 @@ export type WhatsAppContact = {
   /** Name the contact set on their own profile. */
   pushName?: string
   profilePicture?: string
+  profilePictureCheckedAt?: Date
   createdAt: Date
   updatedAt: Date
 }

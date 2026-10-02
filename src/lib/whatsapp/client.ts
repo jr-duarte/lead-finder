@@ -22,6 +22,8 @@ export type WaContact = {
   phone?: string
   name?: string
   pushName?: string
+  /** WhatsApp said the profile picture changed or was removed. */
+  pictureChanged?: boolean
 }
 
 export type WaMessage = {
@@ -147,6 +149,11 @@ export interface WhatsAppClient {
    * Brazilian accounts without the ninth digit. Null when it has none.
    */
   checkNumber(phone: string): Promise<string | null>
+  /**
+   * Temporary link to a contact's profile picture (small version), or null
+   * when they have none or hide it from this account.
+   */
+  profilePictureUrl(jid: string): Promise<string | null>
   /**
    * Whether WhatsApp is limiting this account's outreach to new contacts.
    * Fields are absent when WhatsApp does not say.

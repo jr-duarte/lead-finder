@@ -29,6 +29,15 @@ export class FakeWhatsAppClient implements WhatsAppClient {
     return this.registered.get(phone) ?? null
   }
 
+  /** Profile picture links by jid; absent means no picture. */
+  pictures = new Map<string, string>()
+  pictureRequests: string[] = []
+
+  async profilePictureUrl(jid: string) {
+    this.pictureRequests.push(jid)
+    return this.pictures.get(jid) ?? null
+  }
+
   async outreachStatus() {
     return this.outreach
   }

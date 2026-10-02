@@ -97,7 +97,7 @@ type Runtime = {
  * dev hot reloads, so without this a client built by older code (missing a
  * new method) would stay in use until the server restarts.
  */
-const CLIENT_API_VERSION = 5
+const CLIENT_API_VERSION = 6
 
 // Shared across hot reloads and across the instrumentation/route bundles, so
 // there is never more than one socket for the session.
@@ -785,6 +785,10 @@ void refreshStaleClient().catch((error) =>
   console.error("[whatsapp] falha ao atualizar o cliente", error)
 )
 
+/** Profile picture queries, one at a time (see `profilePictureUrl`). */
+let pictureQueue: Promise<unknown> = Promise.resolve()
+const PICTURE_GAP_MS = 250
+
 /** The first of a lead's numbers that has a WhatsApp account. */
 async function findWhatsAppJid(
   client: WhatsAppClient,
@@ -1061,6 +1065,27 @@ export const whatsappSessionService = {
     const client = runtime.client
     if (!client || !isWhatsAppOnline(runtime.status)) return "offline"
     return findWhatsAppJid(client, candidates)
+  },
+
+  /**
+   * A contact's picture link, null when they show none, "offline" when it
+   * cannot be asked now. Asked one at a time with a short gap: opening the
+   * inbox requests a whole page of pictures, and a burst of queries is the
+   * kind of traffic WhatsApp frowns upon.
+   */
+  async profilePictureUrl(jid: string): Promise<string | null | "offline"> {
+    const run = pictureQueue.then(async () => {
+      await refreshStaleClient()
+      const client = runtime.client
+      if (!client || !isWhatsAppOnline(runtime.status)) return "offline"
+      try {
+        return await client.profilePictureUrl(jid)
+      } finally {
+        await new Promise((resolve) => setTimeout(resolve, PICTURE_GAP_MS))
+      }
+    })
+    pictureQueue = run.catch(() => {})
+    return run
   },
 
   /** Whether WhatsApp is limiting new chats; null when offline or unknown. */

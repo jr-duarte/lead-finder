@@ -34,6 +34,12 @@ type RawConversation = WhatsAppConversationDocument & {
   updatedAt?: Date
 }
 
+/** Cleared when the picture changes, so the next view asks WhatsApp again. */
+const PICTURE_FIELDS = {
+  profilePicture: "",
+  profilePictureCheckedAt: "",
+} as const
+
 function toContact(raw: RawContact): WhatsAppContact {
   return {
     id: String(raw._id),
@@ -43,6 +49,7 @@ function toContact(raw: RawContact): WhatsAppContact {
     name: raw.name ?? undefined,
     pushName: raw.pushName ?? undefined,
     profilePicture: raw.profilePicture ?? undefined,
+    profilePictureCheckedAt: raw.profilePictureCheckedAt ?? undefined,
     createdAt: raw.createdAt ?? new Date(),
     updatedAt: raw.updatedAt ?? new Date(),
   }
@@ -96,7 +103,11 @@ export const whatsappConversationRepository = {
 
     const raw = await WhatsAppContactModel.findOneAndUpdate(
       { whatsappId: contact.jid },
-      { $set, $setOnInsert: { whatsappId: contact.jid } },
+      {
+        $set,
+        $setOnInsert: { whatsappId: contact.jid },
+        ...(contact.pictureChanged ? { $unset: PICTURE_FIELDS } : {}),
+      },
       { upsert: true, returnDocument: "after" }
     )
       .lean<RawContact>()
@@ -123,7 +134,11 @@ export const whatsappConversationRepository = {
         return {
           updateOne: {
             filter: { whatsappId: contact.jid },
-            update: { $set, $setOnInsert: { whatsappId: contact.jid } },
+            update: {
+              $set,
+              $setOnInsert: { whatsappId: contact.jid },
+              ...(contact.pictureChanged ? { $unset: PICTURE_FIELDS } : {}),
+            },
             upsert: true,
           },
         }
@@ -169,6 +184,20 @@ export const whatsappConversationRepository = {
       }
     }
     return conversations.map((item) => String(item._id))
+  },
+
+  /** Caches what WhatsApp answered for a contact's picture (null: none). */
+  async setProfilePicture(contactId: string, url: string | null) {
+    await connectToDatabase()
+    await WhatsAppContactModel.updateOne(
+      { _id: contactId },
+      url
+        ? { $set: { profilePicture: url, profilePictureCheckedAt: new Date() } }
+        : {
+            $set: { profilePictureCheckedAt: new Date() },
+            $unset: { profilePicture: "" },
+          }
+    ).exec()
   },
 
   async findContactById(id: string): Promise<WhatsAppContact | null> {

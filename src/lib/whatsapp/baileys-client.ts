@@ -364,6 +364,19 @@ export function createBaileysClient(
       return result?.exists && result.jid ? jidNormalizedUser(result.jid) : null
     },
 
+    async profilePictureUrl(jid) {
+      if (!socket) throw new Error("WhatsApp não está conectado.")
+      try {
+        return (await socket.profilePictureUrl(jid, "preview")) ?? null
+      } catch (error) {
+        // 404: no picture; 401/403: hidden by the contact's privacy settings.
+        const status = (error as { output?: { statusCode?: number } })?.output
+          ?.statusCode
+        if (status === 401 || status === 403 || status === 404) return null
+        throw error
+      }
+    },
+
     async outreachStatus() {
       if (!socket) throw new Error("WhatsApp não está conectado.")
       // Each query may fail on accounts where WhatsApp does not expose it;

@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { ConversationActions } from "@/components/whatsapp/conversation-actions"
+import { ContactAvatar } from "@/components/whatsapp/contact-avatar"
 import { MessageMedia } from "@/components/whatsapp/message-media"
 import { MessageQuote } from "@/components/whatsapp/message-quote"
 import {
@@ -629,6 +630,10 @@ export function ChatPanel({
       <div className="flex items-center gap-3 border-b px-4 py-3">
         {conversation ? (
           <>
+            <ContactAvatar
+              conversationId={conversation.id}
+              name={conversation.title}
+            />
             <div className="min-w-0">
               <p className="truncate font-medium">{conversation.title}</p>
               {conversation.phone ? (
