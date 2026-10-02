@@ -83,6 +83,12 @@ export type WaClientHandlers = {
 export interface WhatsAppClient {
   start(handlers: WaClientHandlers): Promise<void>
   sendText(chatJid: string, text: string): Promise<WaMessage>
+  /**
+   * Asks WhatsApp whether a number (digits with country code) has an
+   * account, returning its jid — which may differ from the digits, e.g. old
+   * Brazilian accounts without the ninth digit. Null when it has none.
+   */
+  checkNumber(phone: string): Promise<string | null>
   /** Unlinks the device on the phone and drops the local credentials. */
   logout(): Promise<void>
   /** Closes the socket but keeps the session for the next start. */

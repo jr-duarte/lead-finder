@@ -35,6 +35,7 @@ import { BusinessEditDialog } from "@/components/businesses/business-edit-dialog
 import { BusinessStatusBadge } from "@/components/businesses/business-status-badge"
 import { ErrorState } from "@/components/common/error-state"
 import { BusinessNotes } from "@/components/notes/business-notes"
+import { LeadWhatsAppPanel } from "@/components/whatsapp/lead-whatsapp-panel"
 import { PipelineStageBadge } from "@/components/pipeline/pipeline-stage-badge"
 import { PipelineStageSelect } from "@/components/pipeline/pipeline-stage-select"
 import {
@@ -217,6 +218,7 @@ export function BusinessDetailView({ id }: { id: string }) {
         <TabsList>
           <TabsTrigger value="info">Informações</TabsTrigger>
           <TabsTrigger value="approach">Abordagem</TabsTrigger>
+          <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
           <TabsTrigger value="contact">Contato</TabsTrigger>
           <TabsTrigger value="registry">Receita</TabsTrigger>
           <TabsTrigger value="location">Localização</TabsTrigger>
@@ -298,6 +300,10 @@ export function BusinessDetailView({ id }: { id: string }) {
 
         <TabsContent value="approach" className="pt-4">
           <LeadApproachPanel business={business} />
+        </TabsContent>
+
+        <TabsContent value="whatsapp" className="pt-4">
+          <LeadWhatsAppPanel business={business} />
         </TabsContent>
 
         <TabsContent value="contact" className="pt-4">

@@ -115,12 +115,16 @@ function MessageBubble({ message }: { message: WhatsAppMessageDTO }) {
 function Composer({
   conversationId,
   online,
+  initialDraft = "",
 }: {
   conversationId: string
   online: boolean
+  initialDraft?: string
 }) {
   const send = useSendMessage(conversationId)
-  const [draft, setDraft] = React.useState("")
+  // A prefilled text (e.g. the AI approach) is only a draft: the user
+  // reviews it and decides to send.
+  const [draft, setDraft] = React.useState(initialDraft)
 
   const submit = async () => {
     const text = draft.trim()
@@ -172,9 +176,11 @@ function Composer({
 export function ChatPanel({
   conversationId,
   online,
+  initialDraft,
 }: {
   conversationId: string
   online: boolean
+  initialDraft?: string
 }) {
   const detail = useConversation(conversationId)
   const messages = useMessages(conversationId)
@@ -268,7 +274,11 @@ export function ChatPanel({
         )}
       </div>
 
-      <Composer conversationId={conversationId} online={online} />
+      <Composer
+        conversationId={conversationId}
+        online={online}
+        initialDraft={initialDraft}
+      />
     </div>
   )
 }

@@ -5,6 +5,8 @@ import QRCode from "qrcode"
 
 import {
   isWhatsAppOnline,
+  leadWhatsAppCandidates,
+  type WhatsAppConversation,
   type WhatsAppMessage,
   type WhatsAppStatus,
   type WhatsAppSyncStats,
@@ -18,12 +20,17 @@ import type {
   WhatsAppClient,
   WhatsAppClientFactory,
 } from "@/lib/whatsapp/client"
+import { businessRepository } from "@/repositories/business.repository"
 import { whatsappConversationRepository } from "@/repositories/whatsapp-conversation.repository"
 import { whatsappMessageRepository } from "@/repositories/whatsapp-message.repository"
 import { whatsappSessionRepository } from "@/repositories/whatsapp-session.repository"
 import { emitWhatsAppEvent } from "@/services/whatsapp/events"
-import { ingestBatch } from "@/services/whatsapp/ingest.service"
+import {
+  ingestBatch,
+  type IngestResult,
+} from "@/services/whatsapp/ingest.service"
 import { findLeadByPhone } from "@/services/whatsapp/lead-matcher"
+import { advanceLeadStages } from "@/services/whatsapp/pipeline-automation"
 
 /**
  * Owns the one WhatsApp connection of this server process: connect, QR code,
@@ -333,11 +340,36 @@ function abortSync(reason: string) {
   log(`sincronização interrompida: ${reason}`)
 }
 
+/**
+ * Moves linked leads along the board after new messages. A failure here is
+ * logged and never undoes the messages already stored.
+ */
+async function applyPipelineAutomation(result: IngestResult): Promise<void> {
+  try {
+    const changes = await advanceLeadStages(result)
+    for (const change of changes) {
+      log(
+        `lead ${change.businessId} movido para ${change.to}${change.from ? ` (era ${change.from})` : " (entrou no funil)"}`
+      )
+    }
+    if (changes.length > 0) {
+      emitWhatsAppEvent({
+        type: "leads",
+        businessIds: changes.map((change) => change.businessId),
+      })
+    }
+  } catch (error) {
+    console.error("[whatsapp] falha ao atualizar o funil", error)
+  }
+}
+
 function handleBatch(batch: WaBatch, source: WaBatchSource) {
   void enqueue(async () => {
     const result = await ingestBatch(batch, source, {
       historySince: runtime.historySince,
     })
+    // History is the past: only fresh activity moves leads on the board.
+    if (source !== "history") await applyPipelineAutomation(result)
 
     const sync = runtime.sync
     if (sync) {
@@ -664,11 +696,12 @@ export const whatsappSessionService = {
   ): Promise<WhatsAppMessage> {
     const conversation =
       await whatsappConversationRepository.findById(conversationId)
-    if (!conversation) throw new SendError("Conversa não encontrada.", 404)
+    if (!conversation)
+      throw new WhatsAppActionError("Conversa não encontrada.", 404)
 
     const client = runtime.client
     if (!client || !isWhatsAppOnline(runtime.status)) {
-      throw new SendError(
+      throw new WhatsAppActionError(
         "O WhatsApp não está conectado. Conecte para enviar mensagens.",
         409
       )
@@ -679,7 +712,7 @@ export const whatsappSessionService = {
       sent = await client.sendText(conversation.whatsappChatId, text)
     } catch (error) {
       console.error("[whatsapp] falha ao enviar mensagem", error)
-      throw new SendError(
+      throw new WhatsAppActionError(
         errorMessage(error, "Não foi possível enviar a mensagem."),
         502
       )
@@ -687,9 +720,13 @@ export const whatsappSessionService = {
 
     // The same message also comes back as an event; the unique id makes the
     // second write a no-op.
-    await enqueue(() =>
-      ingestBatch({ chats: [], contacts: [], messages: [sent] }, "live")
-    )
+    await enqueue(async () => {
+      const result = await ingestBatch(
+        { chats: [], contacts: [], messages: [sent] },
+        "live"
+      )
+      await applyPipelineAutomation(result)
+    })
     // Replying means the conversation was read.
     await whatsappConversationRepository.markRead(conversation.id)
     log(`mensagem enviada (conversa ${conversation.id})`)
@@ -697,18 +734,104 @@ export const whatsappSessionService = {
 
     const stored = await whatsappMessageRepository.findByWhatsAppId(sent.id)
     if (!stored)
-      throw new SendError("Mensagem enviada, mas não foi salva.", 500)
+      throw new WhatsAppActionError("Mensagem enviada, mas não foi salva.", 500)
     return stored
+  },
+
+  /**
+   * Opens (or reuses) the conversation with a lead, so the first message can
+   * be sent from the CRM. Each of the lead's numbers is checked with WhatsApp
+   * first; no conversation is created for a number without an account.
+   */
+  async startConversation(businessId: string): Promise<WhatsAppConversation> {
+    const business = await businessRepository.findById(businessId)
+    if (!business) throw new WhatsAppActionError("Lead não encontrado.", 404)
+
+    const [existing] =
+      await whatsappConversationRepository.listByBusiness(businessId)
+    if (existing) return existing
+
+    const candidates = leadWhatsAppCandidates(business)
+    if (candidates.length === 0) {
+      throw new WhatsAppActionError(
+        "Este lead não tem telefone cadastrado. Edite o lead e informe um número.",
+        422
+      )
+    }
+
+    const client = runtime.client
+    if (!client || !isWhatsAppOnline(runtime.status)) {
+      throw new WhatsAppActionError(
+        "O WhatsApp não está conectado. Conecte para iniciar conversas.",
+        409
+      )
+    }
+
+    let jid: string | null = null
+    for (const phone of candidates) {
+      try {
+        jid = await client.checkNumber(phone)
+      } catch (error) {
+        console.error("[whatsapp] falha ao verificar número", error)
+        throw new WhatsAppActionError(
+          "Não foi possível verificar o número no WhatsApp. Tente novamente.",
+          502
+        )
+      }
+      if (jid) break
+    }
+    if (!jid) {
+      throw new WhatsAppActionError(
+        "Nenhum telefone deste lead tem WhatsApp.",
+        422
+      )
+    }
+
+    const chatJid = jid
+    const conversation = await enqueue(async () => {
+      // A brand-new contact is named after the business until WhatsApp
+      // tells us more; a known contact keeps its address-book name.
+      const contact =
+        (await whatsappConversationRepository.findContactByJid(chatJid)) ??
+        (await whatsappConversationRepository.upsertContact({
+          jid: chatJid,
+          phone: /^(\d+)@s\.whatsapp\.net$/.exec(chatJid)?.[1],
+          name: business.name,
+        }))
+      const { conversation } =
+        await whatsappConversationRepository.ensureConversation(
+          chatJid,
+          contact
+        )
+      // An existing chat already tied to another lead keeps that link.
+      if (!conversation.businessId) {
+        return (
+          (await whatsappConversationRepository.setLead(
+            conversation.id,
+            businessId,
+            "manual"
+          )) ?? conversation
+        )
+      }
+      return conversation
+    })
+
+    log(`conversa aberta com o lead ${businessId}`)
+    emitWhatsAppEvent({
+      type: "conversations",
+      conversationIds: [conversation.id],
+    })
+    return conversation
   },
 }
 
-/** Failure to send, carrying the HTTP status the route should answer with. */
-export class SendError extends Error {
+/** A WhatsApp action that failed, carrying the HTTP status the route should answer with. */
+export class WhatsAppActionError extends Error {
   constructor(
     message: string,
     readonly status: number
   ) {
     super(message)
-    this.name = "SendError"
+    this.name = "WhatsAppActionError"
   }
 }

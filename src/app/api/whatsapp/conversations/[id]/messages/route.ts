@@ -4,7 +4,7 @@ import { apiError, searchParamsToObject } from "@/lib/api"
 import { messageListSchema, sendMessageSchema } from "@/schemas/whatsapp"
 import { whatsappConversationService } from "@/services/whatsapp/conversation.service"
 import {
-  SendError,
+  WhatsAppActionError,
   whatsappSessionService,
 } from "@/services/whatsapp/session.service"
 
@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: Context) {
     const message = await whatsappSessionService.sendText(id, text)
     return NextResponse.json(message, { status: 201 })
   } catch (error) {
-    if (error instanceof SendError) {
+    if (error instanceof WhatsAppActionError) {
       return NextResponse.json(
         { message: error.message },
         { status: error.status }

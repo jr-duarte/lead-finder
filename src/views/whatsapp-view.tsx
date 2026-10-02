@@ -38,6 +38,16 @@ export function WhatsAppView() {
   const searchParams = useSearchParams()
   // The open conversation lives in the URL, so a refresh keeps it.
   const selectedId = searchParams.get("c")
+  // A prefilled message (e.g. the AI approach). It seeds the composer when
+  // the chat mounts, then leaves the URL so a refresh does not bring it back.
+  const draftParam = searchParams.get("draft")
+
+  React.useEffect(() => {
+    if (!draftParam) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("draft")
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [draftParam, searchParams, router, pathname])
 
   const [search, setSearch] = React.useState("")
   const debouncedSearch = useDebounced(search, 300)
@@ -110,6 +120,7 @@ export function WhatsAppView() {
               key={selectedId}
               conversationId={selectedId}
               online={online}
+              initialDraft={draftParam ?? undefined}
             />
           </div>
         ) : (

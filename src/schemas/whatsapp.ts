@@ -7,8 +7,19 @@ export const conversationListSchema = z.object({
     .trim()
     .optional()
     .transform((value) => (value === "" ? undefined : value)),
+  /** Only conversations linked to this lead. */
+  businessId: z
+    .string()
+    .refine((value) => Types.ObjectId.isValid(value), "Lead inválido")
+    .optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(30),
+})
+
+export const startConversationSchema = z.object({
+  businessId: z
+    .string()
+    .refine((value) => Types.ObjectId.isValid(value), "Lead inválido"),
 })
 
 export const messageListSchema = z.object({

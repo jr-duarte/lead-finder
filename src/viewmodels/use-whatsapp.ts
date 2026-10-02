@@ -21,6 +21,9 @@ import type {
   WhatsAppMessagesPageDTO,
   WhatsAppSnapshotDTO,
 } from "@/types/api"
+import { businessKeys } from "@/viewmodels/use-businesses"
+import { noteKeys } from "@/viewmodels/use-notes"
+import { pipelineKeys } from "@/viewmodels/use-pipeline"
 
 export const whatsappKeys = {
   all: ["whatsapp"] as const,
@@ -53,6 +56,7 @@ type ServerEvent =
   | { type: "conversations"; conversationIds: string[] }
   | { type: "message"; conversationId: string }
   | { type: "message-status" }
+  | { type: "leads"; businessIds: string[] }
 
 /**
  * Subscribes to the server's event stream and refreshes whatever changed, so
@@ -107,6 +111,15 @@ export function useWhatsAppEvents() {
             queryKey: [...whatsappKeys.all, "messages"],
           })
           break
+        case "leads":
+          // A lead changed stage: refresh the board, the lead and its notes.
+          void queryClient.invalidateQueries({ queryKey: businessKeys.all })
+          void queryClient.invalidateQueries({ queryKey: pipelineKeys.all })
+          void queryClient.invalidateQueries({ queryKey: noteKeys.all })
+          void queryClient.invalidateQueries({
+            queryKey: whatsappKeys.conversations(),
+          })
+          break
       }
     }
 
@@ -144,6 +157,48 @@ export function useDisconnectWhatsApp() {
 }
 
 const CONVERSATIONS_PAGE_SIZE = 50
+
+/** Conversations linked to one lead, for its detail page. */
+export function useLeadConversations(businessId: string) {
+  return useQuery({
+    queryKey: [...whatsappKeys.conversations(), "lead", businessId] as const,
+    queryFn: () =>
+      apiFetch<PaginatedDTO<WhatsAppConversationDTO>>(
+        `/api/whatsapp/conversations?${toQueryString({ businessId, pageSize: 10 })}`
+      ),
+    enabled: Boolean(businessId),
+  })
+}
+
+/**
+ * Opens the conversation with a lead (checking which number has WhatsApp)
+ * and resolves to it; the caller decides where to show it.
+ */
+export function useStartConversation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (businessId: string) =>
+      apiFetch<WhatsAppConversationDTO>("/api/whatsapp/conversations", {
+        method: "POST",
+        body: JSON.stringify({ businessId }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: whatsappKeys.conversations(),
+      })
+    },
+    onError: (error: Error) => {
+      toast.error("Não foi possível abrir a conversa", {
+        description: error.message,
+      })
+    },
+  })
+}
+
+/** Link to the inbox with a conversation open and, optionally, a draft. */
+export function whatsappInboxHref(conversationId: string, draft?: string) {
+  return `/whatsapp?${toQueryString({ c: conversationId, draft })}`
+}
 
 export function useConversations(search: string) {
   return useInfiniteQuery({

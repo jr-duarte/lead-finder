@@ -20,6 +20,8 @@ import type {
   WaMessage,
   WhatsAppClient,
 } from "@/lib/whatsapp/client"
+import { BusinessModel } from "@/models/business.model"
+import { NoteModel } from "@/models/note.model"
 import { WhatsAppContactModel } from "@/models/whatsapp-contact.model"
 import { WhatsAppConversationModel } from "@/models/whatsapp-conversation.model"
 import { WhatsAppMessageModel } from "@/models/whatsapp-message.model"
@@ -28,7 +30,7 @@ import { onWhatsAppEvent, type WhatsAppEvent } from "@/services/whatsapp/events"
 import {
   configureWhatsAppRuntime,
   resetWhatsAppRuntime,
-  SendError,
+  WhatsAppActionError,
   whatsappSessionService,
 } from "@/services/whatsapp/session.service"
 
@@ -40,7 +42,13 @@ class FakeWhatsAppClient implements WhatsAppClient {
   starts = 0
   sent: { chatJid: string; text: string }[] = []
   loggedOut = false
+  /** Numbers that "have WhatsApp", mapped to the jid WhatsApp answers with. */
+  registered = new Map<string, string>()
   private counter = 0
+
+  async checkNumber(phone: string) {
+    return this.registered.get(phone) ?? null
+  }
 
   async start(handlers: WaClientHandlers) {
     this.handlers = handlers
@@ -154,6 +162,8 @@ beforeEach(() => {
 afterEach(async () => {
   resetWhatsAppRuntime()
   await Promise.all([
+    BusinessModel.deleteMany({}),
+    NoteModel.deleteMany({}),
     WhatsAppSessionModel.deleteMany({}),
     WhatsAppContactModel.deleteMany({}),
     WhatsAppConversationModel.deleteMany({}),
@@ -415,6 +425,189 @@ describe("mensagens com o CRM aberto", () => {
 
     await expect(
       whatsappSessionService.sendText(String(conversation?._id), "Olá")
-    ).rejects.toBeInstanceOf(SendError)
+    ).rejects.toBeInstanceOf(WhatsAppActionError)
+  })
+})
+
+let seed = 0
+async function seedLead(fields: Record<string, unknown> = {}) {
+  const doc = await BusinessModel.create({
+    name: "Padaria XYZ",
+    source: "manual",
+    externalId: `lead-${(seed += 1)}`,
+    phone: "(11) 99999-8888",
+    ...fields,
+  })
+  return String(doc._id)
+}
+
+async function stageOf(businessId: string) {
+  const business = await BusinessModel.findById(businessId).lean<{
+    pipeline?: { stage?: string }
+  }>()
+  return business?.pipeline?.stage ?? null
+}
+
+describe("iniciar conversa com um lead", () => {
+  it("verifica o número, cria a conversa e vincula ao lead", async () => {
+    const businessId = await seedLead()
+    await connectAndSync([])
+    client.registered.set("5511999998888", JOAO)
+
+    const conversation =
+      await whatsappSessionService.startConversation(businessId)
+
+    expect(conversation.whatsappChatId).toBe(JOAO)
+    expect(conversation.businessId).toBe(businessId)
+    expect(conversation.leadLinkSource).toBe("manual")
+    expect(conversation.title).toBe("Padaria XYZ")
+  })
+
+  it("usa o jid que o WhatsApp devolve (conta sem o nono dígito)", async () => {
+    const businessId = await seedLead()
+    await connectAndSync([])
+    client.registered.set("5511999998888", "551199998888@s.whatsapp.net")
+
+    const conversation =
+      await whatsappSessionService.startConversation(businessId)
+    expect(conversation.whatsappChatId).toBe("551199998888@s.whatsapp.net")
+  })
+
+  it("tenta os outros telefones do lead", async () => {
+    const businessId = await seedLead({
+      registry: { phones: ["(21) 98888-7777"] },
+    })
+    await connectAndSync([])
+    client.registered.set("5521988887777", "5521988887777@s.whatsapp.net")
+
+    const conversation =
+      await whatsappSessionService.startConversation(businessId)
+    expect(conversation.whatsappChatId).toBe("5521988887777@s.whatsapp.net")
+  })
+
+  it("reaproveita a conversa que o lead já tem", async () => {
+    const businessId = await seedLead()
+    await connectAndSync([])
+    client.registered.set("5511999998888", JOAO)
+
+    const first = await whatsappSessionService.startConversation(businessId)
+    const second = await whatsappSessionService.startConversation(businessId)
+    expect(second.id).toBe(first.id)
+    expect(await WhatsAppConversationModel.countDocuments()).toBe(1)
+  })
+
+  it("recusa número sem WhatsApp, lead sem telefone e CRM desconectado", async () => {
+    const withoutWhatsApp = await seedLead()
+    const withoutPhone = await seedLead({ phone: undefined })
+    await connectAndSync([])
+
+    await expect(
+      whatsappSessionService.startConversation(withoutWhatsApp)
+    ).rejects.toMatchObject({ status: 422, message: /não.*WhatsApp/i })
+    await expect(
+      whatsappSessionService.startConversation(withoutPhone)
+    ).rejects.toMatchObject({ status: 422 })
+    expect(await WhatsAppConversationModel.countDocuments()).toBe(0)
+
+    await whatsappSessionService.disconnect()
+    await expect(
+      whatsappSessionService.startConversation(withoutWhatsApp)
+    ).rejects.toMatchObject({ status: 409 })
+  })
+})
+
+describe("funil automático", () => {
+  async function openWithLead(fields: Record<string, unknown> = {}) {
+    const businessId = await seedLead(fields)
+    await connectAndSync([])
+    client.registered.set("5511999998888", JOAO)
+    const conversation =
+      await whatsappSessionService.startConversation(businessId)
+    return { businessId, conversationId: conversation.id }
+  }
+
+  it("primeira mensagem enviada coloca o lead em Contatado", async () => {
+    const { businessId, conversationId } = await openWithLead()
+    expect(await stageOf(businessId)).toBeNull()
+
+    await whatsappSessionService.sendText(conversationId, "Olá!")
+
+    expect(await stageOf(businessId)).toBe("CONTACTED")
+    const notes = await NoteModel.find({ businessId })
+    expect(notes).toHaveLength(1)
+    expect(notes[0].content).toMatch(/Contatado/)
+    expect(notes[0].stage).toBe("CONTACTED")
+  })
+
+  it("resposta do lead move para Respondeu e avisa o frontend", async () => {
+    const { businessId, conversationId } = await openWithLead()
+    await whatsappSessionService.sendText(conversationId, "Olá!")
+
+    const events: WhatsAppEvent[] = []
+    const off = onWhatsAppEvent((event) => events.push(event))
+    client.on.onBatch(
+      batch([incoming("r1", "Oi, tudo bem?", "2026-10-01T14:00:00Z")]),
+      "live"
+    )
+    await until(async () => (await stageOf(businessId)) === "REPLIED")
+    await until(() => events.some((event) => event.type === "leads"))
+    off()
+  })
+
+  it("resposta recebida com o CRM fechado também conta", async () => {
+    const { businessId } = await openWithLead({
+      pipeline: { stage: "CONTACTED", position: 0, enteredAt: new Date() },
+    })
+    client.on.onBatch(
+      batch([incoming("r1", "Oi", "2026-10-01T09:30:00Z")]),
+      "offline"
+    )
+    await until(async () => (await stageOf(businessId)) === "REPLIED")
+  })
+
+  it("histórico antigo não mexe no funil", async () => {
+    const { businessId } = await openWithLead()
+    client.on.onBatch(
+      batch([incoming("h1", "Mensagem antiga", new Date().toISOString())]),
+      "history"
+    )
+    await until(
+      async () =>
+        (await WhatsAppMessageModel.countDocuments({
+          whatsappMessageId: "h1",
+        })) === 1
+    )
+    expect(await stageOf(businessId)).toBeNull()
+  })
+
+  it("nunca mexe em leads em reunião, proposta, ganhos ou perdidos", async () => {
+    for (const stage of ["MEETING", "PROPOSAL", "WON", "LOST"]) {
+      bootCrm()
+      await BusinessModel.deleteMany({})
+      await WhatsAppConversationModel.deleteMany({})
+      const { businessId, conversationId } = await openWithLead({
+        pipeline: { stage, position: 0, enteredAt: new Date() },
+      })
+      await whatsappSessionService.sendText(conversationId, "Olá!")
+      client.on.onBatch(
+        batch([incoming(`r-${stage}`, "Oi", new Date().toISOString())]),
+        "live"
+      )
+      await until(
+        async () =>
+          (await WhatsAppMessageModel.countDocuments({
+            whatsappMessageId: `r-${stage}`,
+          })) === 1
+      )
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      expect(await stageOf(businessId)).toBe(stage)
+    }
+    expect(await NoteModel.countDocuments()).toBe(0)
+  })
+
+  it("conversa sem lead não cria lead nem nota", async () => {
+    await connectAndSync([incoming("m1", "Oi", "2026-10-01T09:30:00Z")])
+    expect(await BusinessModel.countDocuments()).toBe(0)
+    expect(await NoteModel.countDocuments()).toBe(0)
   })
 })

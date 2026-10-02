@@ -1,8 +1,17 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import * as React from "react"
-import { Check, Copy, ExternalLink, RefreshCw, Sparkles } from "lucide-react"
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  Loader2,
+  MessageCircle,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -20,6 +29,10 @@ import {
   useGenerateApproach,
   useIsGeneratingApproach,
 } from "@/viewmodels/use-businesses"
+import {
+  useStartConversation,
+  whatsappInboxHref,
+} from "@/viewmodels/use-whatsapp"
 
 /** wa.me wants the full international number, digits only. */
 function whatsappNumber(business: BusinessDTO): string | undefined {
@@ -72,6 +85,40 @@ function Block({
         <p className="text-sm leading-relaxed whitespace-pre-wrap">{text}</p>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Opens the lead's conversation in the CRM inbox with the approach already
+ * typed in. Nothing is sent until the user reviews it and presses send.
+ */
+function SendViaCrmButton({
+  businessId,
+  text,
+}: {
+  businessId: string
+  text: string
+}) {
+  const router = useRouter()
+  const start = useStartConversation()
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={start.isPending}
+      onClick={async () => {
+        const conversation = await start.mutateAsync(businessId)
+        router.push(whatsappInboxHref(conversation.id, text))
+      }}
+    >
+      {start.isPending ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <MessageCircle className="size-4" />
+      )}
+      Enviar pelo CRM
+    </Button>
   )
 }
 
@@ -152,16 +199,22 @@ export function LeadApproachPanel({ business }: { business: BusinessDTO }) {
         text={approach.whatsapp}
         action={
           phone ? (
-            <Button variant="ghost" size="sm" asChild>
-              <a
-                href={`https://wa.me/${phone}?text=${encodeURIComponent(approach.whatsapp)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink className="size-4" />
-                Abrir
-              </a>
-            </Button>
+            <>
+              <SendViaCrmButton
+                businessId={business.id}
+                text={approach.whatsapp}
+              />
+              <Button variant="ghost" size="sm" asChild>
+                <a
+                  href={`https://wa.me/${phone}?text=${encodeURIComponent(approach.whatsapp)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink className="size-4" />
+                  Abrir
+                </a>
+              </Button>
+            </>
           ) : null
         }
       />

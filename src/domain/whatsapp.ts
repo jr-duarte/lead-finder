@@ -221,3 +221,34 @@ export function formatWhatsAppPhone(digits?: string | null): string {
   if (match) return `+55 ${match[1]} ${match[2]}-${match[3]}`
   return `+${digits}`
 }
+
+/**
+ * Turns a phone as stored on a lead into WhatsApp digits (country code
+ * included). Numbers without a country code are taken as Brazilian. Returns
+ * undefined for anything that cannot be a phone number.
+ */
+export function toWhatsAppNumber(raw?: string | null): string | undefined {
+  const digits = raw?.replace(/\D/g, "")
+  if (!digits || digits.length < 10) return undefined
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13))
+    return digits
+  if (raw?.trim().startsWith("+")) return digits
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`
+  return undefined
+}
+
+/** A lead's numbers worth trying, best first: WhatsApp link, phone, registry. */
+export function leadWhatsAppCandidates(lead: {
+  phone?: string
+  enrichment?: { socials?: { whatsapp?: string } }
+  registry?: { phones?: string[] }
+}): string[] {
+  const candidates = [
+    lead.enrichment?.socials?.whatsapp,
+    lead.phone,
+    ...(lead.registry?.phones ?? []),
+  ]
+    .map(toWhatsAppNumber)
+    .filter((value): value is string => Boolean(value))
+  return [...new Set(candidates)]
+}

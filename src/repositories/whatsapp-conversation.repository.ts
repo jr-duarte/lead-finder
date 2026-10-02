@@ -242,16 +242,19 @@ export const whatsappConversationRepository = {
   /** Most recent first; `search` matches the name or the phone digits. */
   async list({
     search,
+    businessId,
     page,
     pageSize,
   }: {
     search?: string
+    businessId?: string
     page: number
     pageSize: number
   }): Promise<Paginated<WhatsAppConversation>> {
     await connectToDatabase()
 
     const query: Record<string, unknown> = {}
+    if (businessId) query.businessId = new Types.ObjectId(businessId)
     const term = search?.trim()
     if (term) {
       const digits = term.replace(/\D/g, "")

@@ -37,7 +37,12 @@ async function leadSummary(businessId?: string): Promise<LeadSummary | null> {
 }
 
 export const whatsappConversationService = {
-  list(params: { search?: string; page: number; pageSize: number }) {
+  list(params: {
+    search?: string
+    businessId?: string
+    page: number
+    pageSize: number
+  }) {
     return whatsappConversationRepository.list(params)
   },
 

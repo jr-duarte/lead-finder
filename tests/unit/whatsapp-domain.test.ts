@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest"
 import {
   contactDisplayName,
   formatWhatsAppPhone,
+  leadWhatsAppCandidates,
   lowerMessageStatuses,
   phoneMatchKey,
+  toWhatsAppNumber,
 } from "@/domain/whatsapp"
 import {
   canonicalJid,
@@ -179,5 +181,29 @@ describe("normalização do Baileys", () => {
       name: undefined,
       pushName: "João",
     })
+  })
+})
+
+describe("números de WhatsApp do lead", () => {
+  it("converte telefones brasileiros para dígitos com DDI", () => {
+    expect(toWhatsAppNumber("(11) 99999-8888")).toBe("5511999998888")
+    expect(toWhatsAppNumber("(11) 3333-4444")).toBe("551133334444")
+    expect(toWhatsAppNumber("+55 11 99999-8888")).toBe("5511999998888")
+    expect(toWhatsAppNumber("https://wa.me/5511999998888")).toBe(
+      "5511999998888"
+    )
+    expect(toWhatsAppNumber("+1 415 555 0100")).toBe("14155550100")
+    expect(toWhatsAppNumber("99999-8888")).toBeUndefined()
+    expect(toWhatsAppNumber("")).toBeUndefined()
+  })
+
+  it("ordena os candidatos: link do WhatsApp, telefone, Receita", () => {
+    expect(
+      leadWhatsAppCandidates({
+        phone: "(11) 3333-4444",
+        enrichment: { socials: { whatsapp: "5511999998888" } },
+        registry: { phones: ["(11) 3333-4444", "(21) 98888-7777"] },
+      })
+    ).toEqual(["5511999998888", "551133334444", "5521988887777"])
   })
 })

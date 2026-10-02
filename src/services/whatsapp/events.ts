@@ -11,6 +11,8 @@ export type WhatsAppEvent =
   | { type: "status"; status: WhatsAppStatus }
   | { type: "conversations"; conversationIds: string[] }
   | { type: "message"; conversationId: string }
+  /** Leads moved on the board because of WhatsApp activity. */
+  | { type: "leads"; businessIds: string[] }
   /** Delivery receipts changed; open chats refresh their ticks. */
   | { type: "message-status" }
 

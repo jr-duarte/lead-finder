@@ -13,6 +13,10 @@ export type IngestResult = {
   /** Conversations created or changed by this batch. */
   conversationIds: string[]
   newMessages: number
+  /** Conversations that got a new message from the contact. */
+  repliedConversationIds: string[]
+  /** Conversations that got a new message sent by us. */
+  contactedConversationIds: string[]
 }
 
 export type IngestOptions = {
@@ -138,9 +142,11 @@ export async function ingestBatch(
 
   const newIncoming = new Map<string, number>()
   const withNewMessages = new Set<string>()
+  const withNewOutgoing = new Set<string>()
   for (const item of inserted) {
     withNewMessages.add(item.conversationId)
-    if (!item.fromMe) {
+    if (item.fromMe) withNewOutgoing.add(item.conversationId)
+    else {
       newIncoming.set(
         item.conversationId,
         (newIncoming.get(item.conversationId) ?? 0) + 1
@@ -180,5 +186,10 @@ export async function ingestBatch(
     }
   }
 
-  return { conversationIds: [...touched], newMessages: inserted.length }
+  return {
+    conversationIds: [...touched],
+    newMessages: inserted.length,
+    repliedConversationIds: [...newIncoming.keys()],
+    contactedConversationIds: [...withNewOutgoing],
+  }
 }

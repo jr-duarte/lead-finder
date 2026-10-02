@@ -259,6 +259,12 @@ export function createBaileysClient(
       return { ...normalized, chatJid, to: chatJid }
     },
 
+    async checkNumber(phone) {
+      if (!socket) throw new Error("WhatsApp não está conectado.")
+      const [result] = (await socket.onWhatsApp(phone)) ?? []
+      return result?.exists && result.jid ? jidNormalizedUser(result.jid) : null
+    },
+
     async logout() {
       const current = socket
       socket = null
