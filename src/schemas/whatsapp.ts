@@ -16,11 +16,28 @@ export const conversationListSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(30),
 })
 
-export const startConversationSchema = z.object({
-  businessId: z
-    .string()
-    .refine((value) => Types.ObjectId.isValid(value), "Lead inválido"),
-})
+/** Opens a conversation with a lead, or with any number typed by hand. */
+export const startConversationSchema = z.union([
+  z.object({
+    businessId: z
+      .string()
+      .refine((value) => Types.ObjectId.isValid(value), "Lead inválido"),
+  }),
+  z.object({
+    phone: z
+      .string()
+      .trim()
+      .min(8, "Informe o número com DDD")
+      .max(30, "Número inválido"),
+    /** Saved as the contact's name when the number is new to the CRM. */
+    name: z
+      .string()
+      .trim()
+      .max(120)
+      .optional()
+      .transform((value) => value || undefined),
+  }),
+])
 
 export const messageListSchema = z.object({
   /** Id of the oldest message already loaded. */

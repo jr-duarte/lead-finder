@@ -6,6 +6,7 @@ import QRCode from "qrcode"
 import {
   isWhatsAppOnline,
   leadWhatsAppCandidates,
+  toWhatsAppNumber,
   type WhatsAppConversation,
   type WhatsAppMessage,
   type WhatsAppStatus,
@@ -1063,6 +1064,71 @@ export const whatsappSessionService = {
     })
 
     log(`conversa aberta com o lead ${businessId}`)
+    emitWhatsAppEvent({
+      type: "conversations",
+      conversationIds: [conversation.id],
+    })
+    return conversation
+  },
+
+  /**
+   * Opens a conversation with any number. Without a country code it is read
+   * as Brazilian. When the number belongs to a lead, the conversation is
+   * linked to it, as an incoming message would be.
+   */
+  async startConversationWithNumber(
+    rawPhone: string,
+    name?: string
+  ): Promise<WhatsAppConversation> {
+    const phone = toWhatsAppNumber(rawPhone, "BR")
+    if (!phone) {
+      throw new WhatsAppActionError(
+        "Número inválido. Informe com DDD, por exemplo (11) 99999-8888.",
+        422
+      )
+    }
+
+    await refreshStaleClient()
+    const client = runtime.client
+    if (!client || !isWhatsAppOnline(runtime.status)) {
+      throw new WhatsAppActionError(
+        "O WhatsApp não está conectado. Conecte para iniciar conversas.",
+        409
+      )
+    }
+
+    const chatJid = await findWhatsAppJid(client, [phone])
+    if (!chatJid) {
+      throw new WhatsAppActionError("Este número não tem WhatsApp.", 422)
+    }
+
+    const conversation = await enqueue(async () => {
+      // A name typed here only names contacts the CRM has never seen.
+      const contact =
+        (await whatsappConversationRepository.findContactByJid(chatJid)) ??
+        (await whatsappConversationRepository.upsertContact({
+          jid: chatJid,
+          phone: /^(\d+)@s\.whatsapp\.net$/.exec(chatJid)?.[1],
+          name,
+        }))
+      const { conversation } =
+        await whatsappConversationRepository.ensureConversation(
+          chatJid,
+          contact
+        )
+      if (conversation.businessId || conversation.leadLinkSource === "manual")
+        return conversation
+      const businessId = await findLeadByPhone(conversation.phone)
+      return businessId
+        ? ((await whatsappConversationRepository.setLead(
+            conversation.id,
+            businessId,
+            "auto"
+          )) ?? conversation)
+        : conversation
+    })
+
+    log(`conversa aberta com ${chatJid}`)
     emitWhatsAppEvent({
       type: "conversations",
       conversationIds: [conversation.id],

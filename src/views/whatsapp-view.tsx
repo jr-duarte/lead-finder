@@ -19,6 +19,41 @@ import { WhatsAppStatusBadge } from "@/components/whatsapp/whatsapp-status-badge
 import { isWhatsAppOnline, type WhatsAppStatus } from "@/domain/whatsapp"
 import { useWhatsAppEvents, useWhatsAppStatus } from "@/viewmodels/use-whatsapp"
 
+const LIST_COLLAPSED_KEY = "lead-finder:whatsapp-list-collapsed"
+const collapseListeners = new Set<() => void>()
+
+function readListCollapsed(): boolean {
+  try {
+    return localStorage.getItem(LIST_COLLAPSED_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether the conversation list is collapsed, remembered in this browser.
+ * The server always renders it open, so hydration never mismatches.
+ */
+function useListCollapsed() {
+  const collapsed = React.useSyncExternalStore(
+    (listener) => {
+      collapseListeners.add(listener)
+      return () => collapseListeners.delete(listener)
+    },
+    readListCollapsed,
+    () => false
+  )
+  const setCollapsed = React.useCallback((next: boolean) => {
+    try {
+      localStorage.setItem(LIST_COLLAPSED_KEY, next ? "1" : "0")
+    } catch {
+      // Storage blocked: the choice just lasts until the next reload.
+    }
+    collapseListeners.forEach((listener) => listener())
+  }, [])
+  return [collapsed, setCollapsed] as const
+}
+
 /** Debounces the search box so each keystroke is not a request. */
 function useDebounced<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = React.useState(value)
@@ -50,6 +85,9 @@ export function WhatsAppView() {
   }, [draftParam, searchParams, router, pathname])
 
   const [search, setSearch] = React.useState("")
+  const [listCollapsed, setListCollapsed] = useListCollapsed()
+  // Only with a chat open: without one (and on phones) the list is the page.
+  const collapsed = listCollapsed && Boolean(selectedId)
   const debouncedSearch = useDebounced(search, 300)
 
   const select = (id: string | null) => {
@@ -92,7 +130,14 @@ export function WhatsAppView() {
       )}
 
       {/* History stays readable even while disconnected: it lives in MongoDB. */}
-      <Card className="grid h-[calc(100svh-16rem)] min-h-[480px] grid-cols-1 gap-0 overflow-hidden p-0 md:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr_280px]">
+      <Card
+        className={cn(
+          "grid h-[calc(100svh-16rem)] min-h-[480px] grid-cols-1 gap-0 overflow-hidden p-0",
+          collapsed
+            ? "md:grid-cols-[56px_1fr] xl:grid-cols-[56px_1fr_280px]"
+            : "md:grid-cols-[300px_1fr] xl:grid-cols-[320px_1fr_280px]"
+        )}
+      >
         <div
           className={cn(
             "min-h-0 border-r md:flex md:flex-col",
@@ -105,6 +150,8 @@ export function WhatsAppView() {
             onSearchChange={setSearch}
             selectedId={selectedId}
             onSelect={select}
+            collapsed={collapsed}
+            onCollapsedChange={selectedId ? setListCollapsed : undefined}
           />
         </div>
 

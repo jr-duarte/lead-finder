@@ -25,14 +25,20 @@ export async function GET(request: Request) {
 }
 
 /**
- * Opens the conversation with a lead, checking which of its numbers has
- * WhatsApp. Returns the existing one if the lead already has a conversation.
+ * Opens a conversation, with a lead (`businessId`, trying each of its
+ * numbers) or with a number typed by hand (`phone`, optional `name`).
+ * Returns the existing conversation when there is one.
  */
 export async function POST(request: Request) {
   try {
-    const { businessId } = startConversationSchema.parse(await request.json())
+    const input = startConversationSchema.parse(await request.json())
     const conversation =
-      await whatsappSessionService.startConversation(businessId)
+      "businessId" in input
+        ? await whatsappSessionService.startConversation(input.businessId)
+        : await whatsappSessionService.startConversationWithNumber(
+            input.phone,
+            input.name
+          )
     return NextResponse.json(conversation, { status: 201 })
   } catch (error) {
     if (error instanceof WhatsAppActionError) {

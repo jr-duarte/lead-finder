@@ -466,6 +466,65 @@ describe("iniciar conversa com um lead", () => {
   })
 })
 
+describe("iniciar conversa por número", () => {
+  it("lê o número sem código do país como brasileiro e usa o nome informado", async () => {
+    await connectAndSync([])
+    client.registered.set("5511977776666", "5511977776666@s.whatsapp.net")
+
+    const conversation =
+      await whatsappSessionService.startConversationWithNumber(
+        "(11) 97777-6666",
+        "Fornecedor de embalagens"
+      )
+    expect(conversation.whatsappChatId).toBe("5511977776666@s.whatsapp.net")
+    expect(conversation.title).toBe("Fornecedor de embalagens")
+    expect(conversation.businessId).toBeUndefined()
+
+    // Asking again returns the same conversation.
+    const again =
+      await whatsappSessionService.startConversationWithNumber(
+        "+55 11 97777-6666"
+      )
+    expect(again.id).toBe(conversation.id)
+  })
+
+  it("vincula ao lead quando o número é dele", async () => {
+    const businessId = await seedLead()
+    await connectAndSync([])
+    client.registered.set("5511999998888", JOAO)
+
+    const conversation =
+      await whatsappSessionService.startConversationWithNumber("11999998888")
+    expect(conversation.businessId).toBe(businessId)
+    expect(conversation.leadLinkSource).toBe("auto")
+  })
+
+  it("aceita número de outro país com +", async () => {
+    await connectAndSync([])
+    client.registered.set("14155552671", "14155552671@s.whatsapp.net")
+    const conversation =
+      await whatsappSessionService.startConversationWithNumber(
+        "+1 415 555 2671"
+      )
+    expect(conversation.whatsappChatId).toBe("14155552671@s.whatsapp.net")
+  })
+
+  it("recusa número inválido, sem WhatsApp ou com o CRM desconectado", async () => {
+    await expect(
+      whatsappSessionService.startConversationWithNumber("11999998888")
+    ).rejects.toMatchObject({ status: 409 })
+
+    await connectAndSync([])
+    await expect(
+      whatsappSessionService.startConversationWithNumber("123")
+    ).rejects.toMatchObject({ status: 422 })
+    await expect(
+      whatsappSessionService.startConversationWithNumber("11 98888-1111")
+    ).rejects.toThrow("Este número não tem WhatsApp.")
+    expect(await WhatsAppConversationModel.countDocuments()).toBe(0)
+  })
+})
+
 describe("hot reload em desenvolvimento", () => {
   it("troca um cliente criado por código antigo, sem pedir QR Code", async () => {
     const businessId = await seedLead()

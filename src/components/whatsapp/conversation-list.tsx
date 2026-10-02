@@ -1,13 +1,22 @@
 "use client"
 
+import * as React from "react"
 import { cn } from "cn"
-import { Briefcase, MessagesSquare, Search } from "lucide-react"
+import {
+  Briefcase,
+  MessageSquarePlus,
+  MessagesSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+} from "lucide-react"
 
 import { EmptyState } from "@/components/common/empty-state"
 import { ErrorState } from "@/components/common/error-state"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { NewConversationDialog } from "@/components/whatsapp/new-conversation-dialog"
 import { formatWhatsAppPhone } from "@/domain/whatsapp"
 import type { WhatsAppConversationDTO } from "@/types/api"
 import { useConversations } from "@/viewmodels/use-whatsapp"
@@ -85,6 +94,8 @@ export function ConversationList({
   onSearchChange,
   selectedId,
   onSelect,
+  collapsed = false,
+  onCollapsedChange,
 }: {
   /** What the input shows. */
   search: string
@@ -93,22 +104,107 @@ export function ConversationList({
   onSearchChange: (value: string) => void
   selectedId: string | null
   onSelect: (id: string) => void
+  /** Shrunk to a thin rail, leaving the room to the chat. */
+  collapsed?: boolean
+  /** Absent where collapsing makes no sense (phones). */
+  onCollapsedChange?: (collapsed: boolean) => void
 }) {
   const conversations = useConversations(query)
   const items = conversations.data?.pages.flatMap((page) => page.items) ?? []
+  const [creating, setCreating] = React.useState(false)
+  // A search that is a phone number seeds the new-conversation form.
+  const searchedPhone = /^[\d\s()+-]{8,}$/.test(search.trim())
+    ? search.trim()
+    : ""
+
+  const dialog = (
+    <NewConversationDialog
+      open={creating}
+      onOpenChange={setCreating}
+      initialPhone={searchedPhone}
+      onStarted={(id) => {
+        onSearchChange("")
+        onSelect(id)
+      }}
+    />
+  )
+
+  if (collapsed) {
+    // Counted over what is loaded: enough to tell something new arrived.
+    const unreadChats = items.filter((item) => item.unreadCount > 0).length
+    return (
+      <div className="flex min-h-0 flex-col items-center gap-2 py-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onCollapsedChange?.(false)}
+          aria-label="Mostrar conversas"
+          title="Mostrar conversas"
+        >
+          <PanelLeftOpen className="size-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setCreating(true)}
+          aria-label="Nova conversa"
+          title="Nova conversa"
+        >
+          <MessageSquarePlus className="size-4" />
+        </Button>
+        {unreadChats > 0 ? (
+          <button
+            type="button"
+            onClick={() => onCollapsedChange?.(false)}
+            className="bg-success text-success-foreground flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-medium"
+            title={`${unreadChats} conversa(s) com mensagens não lidas`}
+            aria-label={`${unreadChats} conversa(s) com mensagens não lidas`}
+          >
+            {unreadChats}
+          </button>
+        ) : null}
+        {dialog}
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-0 flex-col">
-      <div className="relative border-b p-3">
-        <Search className="text-muted-foreground absolute top-1/2 left-5 size-4 -translate-y-1/2" />
-        <Input
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Buscar por nome ou telefone"
-          className="pl-8"
-          aria-label="Buscar conversas"
-        />
+      <div className="flex items-center gap-2 border-b p-3">
+        {onCollapsedChange ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden shrink-0 md:inline-flex"
+            onClick={() => onCollapsedChange(true)}
+            aria-label="Recolher conversas"
+            title="Recolher conversas"
+          >
+            <PanelLeftClose className="size-4" />
+          </Button>
+        ) : null}
+        <div className="relative flex-1">
+          <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+          <Input
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Nome ou telefone"
+            className="pl-8"
+            aria-label="Buscar conversas"
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setCreating(true)}
+          aria-label="Nova conversa"
+          title="Nova conversa"
+        >
+          <MessageSquarePlus className="size-4" />
+        </Button>
       </div>
+
+      {dialog}
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {conversations.isError ? (
@@ -126,9 +222,17 @@ export function ConversationList({
               search ? "Nenhuma conversa encontrada" : "Nenhuma conversa ainda"
             }
             description={
-              search
-                ? "Tente outro nome ou número."
-                : "As conversas aparecem aqui após a sincronização."
+              searchedPhone
+                ? "Ainda não há conversa com esse número."
+                : search
+                  ? "Tente outro nome ou número."
+                  : "As conversas aparecem aqui após a sincronização."
+            }
+            action={
+              <Button size="sm" onClick={() => setCreating(true)}>
+                <MessageSquarePlus className="size-4" />
+                {searchedPhone ? "Conversar com esse número" : "Nova conversa"}
+              </Button>
             }
           />
         ) : (

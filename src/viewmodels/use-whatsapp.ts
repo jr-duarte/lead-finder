@@ -195,6 +195,26 @@ export function useStartConversation() {
   })
 }
 
+/**
+ * Opens a conversation with a number typed by hand; the server checks it
+ * has WhatsApp and links it to a lead when the number belongs to one.
+ */
+export function useStartConversationWithNumber() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { phone: string; name?: string }) =>
+      apiFetch<WhatsAppConversationDTO>("/api/whatsapp/conversations", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: whatsappKeys.conversations(),
+      })
+    },
+  })
+}
+
 /** Link to the inbox with a conversation open and, optionally, a draft. */
 export function whatsappInboxHref(conversationId: string, draft?: string) {
   return `/whatsapp?${toQueryString({ c: conversationId, draft })}`
