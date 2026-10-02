@@ -32,6 +32,26 @@ export type PhoneInfo = {
   digits?: string
 }
 
+/**
+ * Countries where libphonenumber cannot tell mobiles from landlines, but the
+ * national numbering plan can: a national number matching the pattern is a
+ * mobile, anything else a landline. Chile: mobiles are 9 + 8 digits, while
+ * landlines start with an area code (2 for Santiago).
+ */
+const MOBILE_PREFIXES: Record<string, RegExp> = {
+  CL: /^9\d{8}$/,
+}
+
+function refineType(
+  type: PhoneType,
+  country: string | undefined,
+  nationalNumber: string
+): PhoneType {
+  const mobile = country ? MOBILE_PREFIXES[country] : undefined
+  if (type !== "FIXED_LINE_OR_MOBILE" || !mobile) return type
+  return mobile.test(nationalNumber) ? "MOBILE" : "FIXED_LINE"
+}
+
 /** Numbers written without a country code are read in this country. */
 export const DEFAULT_COUNTRY = "BR"
 
@@ -67,7 +87,7 @@ export function analyzePhone(
       : type === "MOBILE" ||
           type === "FIXED_LINE" ||
           type === "FIXED_LINE_OR_MOBILE"
-        ? type
+        ? refineType(type, parsed.country, String(parsed.nationalNumber))
         : "OTHER",
     country: parsed.country,
     digits: parsed.number.replace(/^\+/, ""),

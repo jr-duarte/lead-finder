@@ -427,21 +427,27 @@ export const businessRepository = {
   },
 
   /**
-   * Fills the phone type of leads saved before it existed. Cheap to run on
-   * every start: only leads with a phone and no type are read.
+   * Fills the phone type of leads saved before it existed, and re-reads the
+   * ambiguous ones ("fixed line or mobile"), which newer rules may settle.
+   * Cheap to run on every start: only those leads are read, and only
+   * changes are written.
    */
   async backfillPhoneFields(): Promise<number> {
     await connectToDatabase()
     const raw = await BusinessModel.find({
       phone: { $exists: true, $nin: [null, ""] },
-      phoneType: { $exists: false },
-      phoneCountry: { $exists: false },
+      $or: [
+        { phoneType: { $exists: false }, phoneCountry: { $exists: false } },
+        { phoneType: "FIXED_LINE_OR_MOBILE" },
+      ],
     })
-      .select("phone address.country")
+      .select("phone phoneType phoneCountry address.country")
       .lean<
         {
           _id: Types.ObjectId
           phone: string
+          phoneType?: string
+          phoneCountry?: string
           address?: { country?: string }
         }[]
       >()
@@ -450,6 +456,11 @@ export const businessRepository = {
     const updates = raw.flatMap((item) => {
       const fields = phoneFields(item.phone, item.address?.country)
       if (!fields.phoneType && !fields.phoneCountry) return []
+      if (
+        fields.phoneType === item.phoneType &&
+        fields.phoneCountry === item.phoneCountry
+      )
+        return []
       const $set = Object.fromEntries(
         Object.entries(fields).filter(([, value]) => value !== undefined)
       )

@@ -20,6 +20,11 @@ describe("tipo de telefone", () => {
     ["912 345 678", "PT", "MOBILE", "PT"],
     ["+54 9 11 1234-5678", undefined, "MOBILE", "AR"],
     ["+1 212 555 0123", undefined, "FIXED_LINE_OR_MOBILE", "US"],
+    // libphonenumber says "either" for all of Chile; the plan does not.
+    ["+56 9 5770 4330", undefined, "MOBILE", "CL"],
+    ["+56 2 2699 2930", undefined, "FIXED_LINE", "CL"],
+    ["(2) 2638 8805", "CL", "FIXED_LINE", "CL"],
+    ["+56 32 212 3456", undefined, "FIXED_LINE", "CL"],
     // The number's own country code wins over the lead's country.
     ["+55 11 99999-0001", "PT", "MOBILE", "BR"],
   ])("%s (%s) é %s de %s", (phone, country, type, phoneCountry) => {
