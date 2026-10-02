@@ -12,14 +12,14 @@ import {
 } from "@/services/whatsapp/session.service"
 
 export const dynamic = "force-dynamic"
-// Audio conversion and the upload to WhatsApp can take a while.
-export const maxDuration = 120
+// Audio/video conversion and the upload to WhatsApp can take a while.
+export const maxDuration = 300
 
 type Context = { params: Promise<{ id: string }> }
 
 /**
- * Sends an image or an audio (multipart): `file`, plus an optional `caption`
- * for images, `voiceNote=true` for recordings made in the CRM and `replyTo`
+ * Sends an image, a video or an audio (multipart): `file`, plus an optional
+ * `caption` for images and videos, `voiceNote=true` for recordings made in the CRM and `replyTo`
  * (a stored message id) to send it as a reply.
  */
 export async function POST(request: Request, { params }: Context) {

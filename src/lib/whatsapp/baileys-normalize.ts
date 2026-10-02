@@ -111,9 +111,18 @@ function describeContent(
         media: { mimeType: content.imageMessage?.mimetype || "image/jpeg" },
       }
     case "videoMessage":
-      return { type: "video", body: content.videoMessage?.caption ?? "" }
-    case "ptvMessage":
-      return { type: "video", body: "" }
+    case "ptvMessage": {
+      // ptv: the round "video note", same payload without a caption.
+      const video = content.videoMessage ?? content.ptvMessage
+      return {
+        type: "video",
+        body: content.videoMessage?.caption ?? "",
+        media: {
+          mimeType: video?.mimetype || "video/mp4",
+          seconds: video?.seconds ?? undefined,
+        },
+      }
+    }
     case "audioMessage": {
       const audio = content.audioMessage
       return {

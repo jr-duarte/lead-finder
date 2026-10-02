@@ -61,7 +61,7 @@ const envSchema = z.object({
     .max(90)
     .default(30),
   /**
-   * S3 bucket for WhatsApp images and audio. Empty disables media: messages
+   * S3 bucket for WhatsApp images, videos and audio. Empty disables media: messages
    * show placeholders and sending files is off. Credentials come from the
    * AWS SDK's usual chain (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, profile).
    */

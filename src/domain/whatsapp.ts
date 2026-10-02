@@ -78,6 +78,7 @@ export const WHATSAPP_MEDIA_PLACEHOLDERS: Record<WhatsAppMessageType, string> =
 /** Media kinds whose files are downloaded, stored and shown in the chat. */
 export const WHATSAPP_STORED_MEDIA_TYPES = [
   "image",
+  "video",
   "audio",
   "sticker",
 ] as const
@@ -99,7 +100,7 @@ export type WhatsAppMessageMedia = {
   status: WhatsAppMediaStatus
   /** Bytes, once stored. */
   size?: number
-  /** Audio length, when WhatsApp reports it. */
+  /** Audio or video length, when WhatsApp reports it. */
   seconds?: number
   /** Recorded as a voice note rather than sent as an audio file. */
   voiceNote?: boolean
@@ -144,12 +145,18 @@ export const WHATSAPP_SENDABLE_IMAGE_TYPES = [
   "image/webp",
 ] as const
 
-/** Which kind of message an uploaded file becomes, or null if unsupported. */
-export function outgoingMediaKind(mimeType: string): "image" | "audio" | null {
+export type OutgoingMediaKind = "image" | "video" | "audio"
+
+/**
+ * Which kind of message an uploaded file becomes, or null if unsupported.
+ * WebM stays audio: some browsers label voice recordings as video/webm.
+ */
+export function outgoingMediaKind(mimeType: string): OutgoingMediaKind | null {
   const type = mimeType.split(";")[0].trim().toLowerCase()
   if ((WHATSAPP_SENDABLE_IMAGE_TYPES as readonly string[]).includes(type))
     return "image"
   if (type.startsWith("audio/") || type === "video/webm") return "audio"
+  if (type.startsWith("video/")) return "video"
   return null
 }
 
@@ -167,6 +174,9 @@ export function mediaExtension(mimeType: string): string {
     "audio/aac": "aac",
     "audio/webm": "webm",
     "audio/wav": "wav",
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/3gpp": "3gp",
   }
   return known[type] ?? (type.split("/")[1]?.replace(/[^\w]/g, "") || "bin")
 }

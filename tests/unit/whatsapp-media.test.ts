@@ -76,6 +76,42 @@ function photo(id: string, download: () => Promise<Buffer>): WaMessage {
   }
 }
 
+function video(
+  id: string,
+  mimeType: string,
+  download: () => Promise<Buffer>
+): WaMessage {
+  return {
+    ...photo(id, download),
+    type: "video",
+    media: { mimeType, download },
+  }
+}
+
+/** Two seconds of a heavy, barely compressed video, as Matroska. */
+function rawVideo(): Buffer {
+  return spawnSync(
+    ffmpegPath as unknown as string,
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc=size=640x360:rate=30:duration=2",
+      "-c:v",
+      "mpeg4",
+      "-q:v",
+      "1",
+      "-f",
+      "matroska",
+      "pipe:1",
+    ],
+    { maxBuffer: 50 * 1024 * 1024 }
+  ).stdout
+}
+
 async function until(check: () => Promise<boolean>, timeoutMs = 3000) {
   const started = Date.now()
   while (!(await check())) {
@@ -190,6 +226,55 @@ describe("mídia recebida", () => {
       Boolean(await WhatsAppMessageModel.findOne({ "media.status": "failed" }))
     )
     expect(storage.objects.size).toBe(0)
+  })
+
+  it("comprime o vídeo recebido antes de guardar", async () => {
+    const original = rawVideo()
+    await connect()
+    client.on.onBatch(
+      {
+        chats: [],
+        contacts: [],
+        messages: [video("vid1", "video/x-matroska", async () => original)],
+      },
+      "live"
+    )
+    await until(
+      async () =>
+        Boolean(
+          await WhatsAppMessageModel.findOne({ "media.status": "stored" })
+        ),
+      20_000
+    )
+
+    const stored = await WhatsAppMessageModel.findOne().lean()
+    expect(stored?.media?.mimeType).toBe("video/mp4")
+    expect(stored?.media?.storageKey).toMatch(/vid1\.mp4$/)
+    expect(stored?.media?.size).toBeLessThan(original.length)
+    const object = storage.objects.get(stored?.media?.storageKey ?? "")
+    expect(object?.body.subarray(4, 8).toString()).toBe("ftyp")
+  }, 30_000)
+
+  it("guarda o vídeo original quando não consegue comprimir", async () => {
+    const original = Buffer.from("não é um vídeo de verdade")
+    await connect()
+    client.on.onBatch(
+      {
+        chats: [],
+        contacts: [],
+        messages: [video("vid2", "video/mp4", async () => original)],
+      },
+      "live"
+    )
+    await until(async () =>
+      Boolean(await WhatsAppMessageModel.findOne({ "media.status": "stored" }))
+    )
+
+    const stored = await WhatsAppMessageModel.findOne().lean()
+    expect(stored?.media).toMatchObject({
+      mimeType: "video/mp4",
+      size: original.length,
+    })
   })
 
   it("sem bucket configurado, a mídia continua só como marcador", async () => {

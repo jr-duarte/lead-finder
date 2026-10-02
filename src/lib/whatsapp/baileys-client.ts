@@ -333,21 +333,29 @@ export function createBaileysClient(
     },
 
     sendMedia(chatJid, media, options) {
-      return send(
-        chatJid,
+      const content: AnyMessageContent =
         media.kind === "image"
           ? {
               image: media.data,
               mimetype: media.mimeType,
               caption: media.caption || undefined,
             }
-          : {
-              audio: media.data,
-              mimetype: media.mimeType,
-              ptt: media.voiceNote,
-            },
-        options
-      )
+          : media.kind === "video"
+            ? {
+                video: media.data,
+                mimetype: media.mimeType,
+                caption: media.caption || undefined,
+                // Ours, made with the bundled ffmpeg: Baileys would look for
+                // one on the PATH and silently skip the preview.
+                jpegThumbnail: media.thumbnail?.toString("base64"),
+                seconds: media.seconds,
+              }
+            : {
+                audio: media.data,
+                mimetype: media.mimeType,
+                ptt: media.voiceNote,
+              }
+      return send(chatJid, content, options)
     },
 
     async checkNumber(phone) {

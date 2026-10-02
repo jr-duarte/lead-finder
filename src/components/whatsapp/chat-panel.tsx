@@ -9,6 +9,7 @@ import {
   CheckCheck,
   Clock,
   FileAudio,
+  FileVideo,
   Lightbulb,
   Loader2,
   MessageSquare,
@@ -33,6 +34,7 @@ import { MessageQuote } from "@/components/whatsapp/message-quote"
 import {
   formatWhatsAppPhone,
   outgoingMediaKind,
+  type OutgoingMediaKind,
   WHATSAPP_SENDABLE_IMAGE_TYPES,
   type WhatsAppMessageStatus,
 } from "@/domain/whatsapp"
@@ -162,7 +164,7 @@ function MessageBubble({
 
 type Attachment = {
   file: File
-  kind: "image" | "audio"
+  kind: OutgoingMediaKind
   previewUrl?: string
 }
 
@@ -225,14 +227,18 @@ function Composer({
     const kind = outgoingMediaKind(file.type)
     if (!kind) {
       toast.error("Formato não suportado", {
-        description: "Envie uma imagem (JPG, PNG ou WebP) ou um áudio.",
+        description:
+          "Envie uma imagem (JPG, PNG ou WebP), um vídeo ou um áudio.",
       })
       return
     }
     setAttachment({
       file,
       kind,
-      previewUrl: kind === "image" ? URL.createObjectURL(file) : undefined,
+      previewUrl:
+        kind === "image" || kind === "video"
+          ? URL.createObjectURL(file)
+          : undefined,
     })
     textarea.current?.focus()
   }
@@ -241,8 +247,9 @@ function Composer({
     const text = draft.trim()
     if (!online) return
     if (attachment) {
-      // Images carry the text as caption; audio cannot, so it follows apart.
-      const caption = attachment.kind === "image" ? text : undefined
+      // Images and videos carry the text as caption; audio cannot, so it
+      // follows apart.
+      const caption = attachment.kind === "audio" ? undefined : text
       await sendMedia.mutateAsync({
         file: attachment.file,
         fileName: attachment.file.name,
@@ -334,22 +341,34 @@ function Composer({
 
       {attachment ? (
         <div className="bg-muted flex items-center gap-3 rounded-md p-2">
-          {attachment.previewUrl ? (
+          {attachment.kind === "image" && attachment.previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={attachment.previewUrl}
               alt="Imagem anexada"
               className="size-14 rounded object-cover"
             />
+          ) : attachment.kind === "video" && attachment.previewUrl ? (
+            <video
+              src={attachment.previewUrl}
+              muted
+              preload="metadata"
+              className="size-14 rounded bg-black object-cover"
+              aria-label="Vídeo anexado"
+            />
+          ) : attachment.kind === "video" ? (
+            <FileVideo className="text-muted-foreground size-8" />
           ) : (
             <FileAudio className="text-muted-foreground size-8" />
           )}
           <div className="min-w-0 flex-1 text-xs">
             <p className="truncate font-medium">{attachment.file.name}</p>
             <p className="text-muted-foreground">
-              {attachment.kind === "image"
-                ? "O texto abaixo vai como legenda."
-                : "O texto abaixo vai numa mensagem separada."}
+              {attachment.kind === "audio"
+                ? "O texto abaixo vai numa mensagem separada."
+                : attachment.kind === "video"
+                  ? "O texto abaixo vai como legenda. O vídeo é convertido antes do envio."
+                  : "O texto abaixo vai como legenda."}
             </p>
           </div>
           <Button
@@ -391,7 +410,11 @@ function Composer({
               <input
                 ref={fileInput}
                 type="file"
-                accept={[...WHATSAPP_SENDABLE_IMAGE_TYPES, "audio/*"].join(",")}
+                accept={[
+                  ...WHATSAPP_SENDABLE_IMAGE_TYPES,
+                  "video/*",
+                  "audio/*",
+                ].join(",")}
                 className="hidden"
                 onChange={(event) => {
                   attach(event.target.files?.[0])
@@ -403,8 +426,8 @@ function Composer({
                 size="icon"
                 onClick={() => fileInput.current?.click()}
                 disabled={!online || busy}
-                aria-label="Anexar imagem ou áudio"
-                title="Anexar imagem ou áudio"
+                aria-label="Anexar imagem, vídeo ou áudio"
+                title="Anexar imagem, vídeo ou áudio"
               >
                 <Paperclip className="size-4" />
               </Button>
@@ -436,7 +459,7 @@ function Composer({
             placeholder={
               !online
                 ? "Conecte o WhatsApp para enviar mensagens"
-                : attachment?.kind === "image"
+                : attachment && attachment.kind !== "audio"
                   ? "Legenda (opcional)"
                   : "Digite uma mensagem..."
             }

@@ -1,6 +1,7 @@
 import { mediaExtension, outgoingMediaKind } from "@/domain/whatsapp"
 import { getEnv } from "@/lib/env"
 import { optimizeImage } from "@/lib/media/image"
+import { toWhatsAppVideo } from "@/lib/media/video"
 import { toVoiceNote } from "@/lib/media/voice-note"
 import { getMediaStorage, mediaObjectKey } from "@/lib/storage/media-storage"
 import { whatsappMessageRepository } from "@/repositories/whatsapp-message.repository"
@@ -29,16 +30,45 @@ function imageTypeOf(data: Buffer): string | undefined {
   return undefined
 }
 
+/**
+ * Video encoding is CPU-heavy and already multi-threaded: one at a time, so
+ * a history sync full of videos does not stall the server.
+ */
+let videoQueue: Promise<unknown> = Promise.resolve()
+
+/**
+ * Re-encodes a received video for storage, keeping the original when the
+ * new copy is not smaller (WhatsApp already compresses most videos) or the
+ * conversion fails.
+ */
+async function compressForStorage(
+  data: Buffer,
+  mimeType: string
+): Promise<{ data: Buffer; mimeType: string }> {
+  const run = videoQueue.then(() => toWhatsAppVideo(data, { thumbnail: false }))
+  videoQueue = run.catch(() => {})
+  try {
+    const video = await run
+    return video.data.length < data.length ? video : { data, mimeType }
+  } catch (error) {
+    console.warn("[whatsapp] vídeo salvo sem compressão", error)
+    return { data, mimeType }
+  }
+}
+
 /** Stores one file. Returns false when it could not be fetched or saved. */
 async function storeOne(item: PendingMedia): Promise<boolean> {
   const storage = getMediaStorage()
   if (!storage) return false
 
   try {
-    const data = await item.media.download()
-    const mimeType = item.media.mimeType.startsWith("image/")
+    let data = await item.media.download()
+    let mimeType = item.media.mimeType.startsWith("image/")
       ? (imageTypeOf(data) ?? item.media.mimeType)
       : item.media.mimeType
+    if (mimeType.startsWith("video/") && !item.media.optimized) {
+      ;({ data, mimeType } = await compressForStorage(data, mimeType))
+    }
     const storageKey = mediaObjectKey(
       item.conversationId,
       item.whatsappMessageId,
@@ -109,8 +139,9 @@ export class MediaInputError extends Error {
 
 /**
  * Turns an uploaded file into something WhatsApp accepts: images are shrunk
- * and recompressed as JPEG, every audio is converted to Ogg/Opus. `voiceNote` marks a recording
- * made in the CRM, sent as a voice message rather than an audio file.
+ * and recompressed as JPEG, videos re-encoded as MP4 (H.264/AAC), every audio
+ * is converted to Ogg/Opus. `voiceNote` marks a recording made in the CRM,
+ * sent as a voice message rather than an audio file.
  */
 export async function prepareOutgoingMedia(input: {
   data: Buffer
@@ -140,6 +171,17 @@ export async function prepareOutgoingMedia(input: {
       caption: input.caption?.trim() || undefined,
     }
   }
+  if (kind === "video") {
+    try {
+      const video = await toWhatsAppVideo(input.data)
+      return { kind, ...video, caption: input.caption?.trim() || undefined }
+    } catch (error) {
+      throw new MediaInputError(
+        error instanceof Error ? error.message : "Vídeo inválido.",
+        422
+      )
+    }
+  }
   if (kind === "audio") {
     let data: Buffer
     try {
@@ -158,7 +200,7 @@ export async function prepareOutgoingMedia(input: {
     }
   }
   throw new MediaInputError(
-    "Envie uma imagem (JPG, PNG ou WebP) ou um áudio.",
+    "Envie uma imagem (JPG, PNG ou WebP), um vídeo ou um áudio.",
     415
   )
 }

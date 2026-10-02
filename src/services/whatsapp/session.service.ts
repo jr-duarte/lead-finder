@@ -956,7 +956,7 @@ export const whatsappSessionService = {
   ): Promise<WhatsAppMessage> {
     if (!getMediaStorage()) {
       throw new WhatsAppActionError(
-        "Configure o bucket S3 (AWS_S3_BUCKET) para enviar imagens e áudios.",
+        "Configure o bucket S3 (AWS_S3_BUCKET) para enviar imagens, vídeos e áudios.",
         409
       )
     }
@@ -970,7 +970,9 @@ export const whatsappSessionService = {
           media: {
             mimeType: media.mimeType,
             voiceNote: media.kind === "audio" ? media.voiceNote : undefined,
+            seconds: media.kind === "video" ? media.seconds : undefined,
             ...sent.media,
+            optimized: true,
             download: async () => media.data,
           },
         }

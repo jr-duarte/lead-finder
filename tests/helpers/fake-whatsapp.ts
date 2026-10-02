@@ -76,7 +76,7 @@ export class FakeWhatsAppClient implements WhatsAppClient {
       fromMe: true,
       from: "5511000000000@s.whatsapp.net",
       to: chatJid,
-      body: media.kind === "image" ? (media.caption ?? "") : "",
+      body: media.kind === "audio" ? "" : (media.caption ?? ""),
       type: media.kind,
       timestamp: new Date(),
       status: "SENT",

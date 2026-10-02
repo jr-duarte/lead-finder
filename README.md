@@ -404,8 +404,8 @@ proteção anti-bot. O sistema registra o motivo e segue adiante.
 API oficial da Meta. Envio em massa pode levar a bloqueio da conta. O CRM só
 recebe mensagens enquanto está aberto; o que chega com ele fechado é entregue
 na próxima conexão. Se o aparelho ficar muito tempo sem conectar, o WhatsApp
-pode desvinculá-lo e será preciso ler o QR Code de novo. Mídias aparecem como
-marcador (`[imagem]`, `[áudio]`), sem download.
+pode desvinculá-lo e será preciso ler o QR Code de novo. Sem bucket S3, mídias
+aparecem como marcador (`[imagem]`, `[vídeo]`, `[áudio]`), sem download.
 
 ---
 

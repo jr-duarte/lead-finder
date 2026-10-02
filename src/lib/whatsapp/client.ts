@@ -58,12 +58,24 @@ export type WaMedia = {
   mimeType: string
   seconds?: number
   voiceNote?: boolean
+  /** Already shrunk by the CRM before sending: stored as it is. */
+  optimized?: boolean
   /** Fetches and decrypts the file from WhatsApp's servers. */
   download: () => Promise<Buffer>
 }
 
 export type WaOutgoingMedia =
   | { kind: "image"; data: Buffer; mimeType: string; caption?: string }
+  /** Video must already be MP4 (H.264/AAC). */
+  | {
+      kind: "video"
+      data: Buffer
+      mimeType: string
+      caption?: string
+      /** JPEG preview shown before the video downloads. */
+      thumbnail?: Buffer
+      seconds?: number
+    }
   /** Audio must already be Ogg/Opus when sent as a voice note. */
   | { kind: "audio"; data: Buffer; mimeType: string; voiceNote: boolean }
 

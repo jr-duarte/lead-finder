@@ -10,7 +10,7 @@ import {
 import type { WhatsAppMessageDTO } from "@/types/api"
 
 /**
- * The file part of a message bubble: the image or the audio player once the
+ * The file part of a message bubble: the image, video or audio player once the
  * file is stored, a placeholder while it is on its way or when it is gone.
  */
 export function MessageMedia({ message }: { message: WhatsAppMessageDTO }) {
@@ -39,6 +39,18 @@ export function MessageMedia({ message }: { message: WhatsAppMessageDTO }) {
           )}
         />
       </a>
+    )
+  }
+
+  if (url && type === "video") {
+    return (
+      <video
+        controls
+        preload="metadata"
+        playsInline
+        src={url}
+        className="-mx-1.5 -mt-0.5 mb-1 block max-h-80 w-auto max-w-full rounded-md bg-black"
+      />
     )
   }
 
