@@ -369,10 +369,10 @@ export function createBaileysClient(
       try {
         return (await socket.profilePictureUrl(jid, "preview")) ?? null
       } catch (error) {
-        // 404: no picture; 401/403: hidden by the contact's privacy settings.
-        const status = (error as { output?: { statusCode?: number } })?.output
-          ?.statusCode
-        if (status === 401 || status === 403 || status === 404) return null
+        // WhatsApp's own code travels in `data` (Boom's statusCode is a
+        // generic 500). 404: no picture; 401/403: hidden by privacy settings.
+        const code = (error as { data?: unknown })?.data
+        if (code === 401 || code === 403 || code === 404) return null
         throw error
       }
     },

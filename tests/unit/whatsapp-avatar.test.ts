@@ -236,6 +236,19 @@ describe("foto do contato", () => {
     expect(downloads.slice(-2)).toEqual([old, renewed])
   })
 
+  it("falha na consulta não vira erro nem fica em cache", async () => {
+    await connect()
+    const id = await joaoConversation()
+    const url = pictureUrl("joao")
+    client.pictures.set(JOAO, url)
+    served.add(url)
+    client.failPictures = 1
+
+    expect(await conversationAvatar(id)).toBeNull()
+    expect((await conversationAvatar(id))?.data.equals(JPEG)).toBe(true)
+    expect(client.pictureRequests).toEqual([JOAO, JOAO])
+  })
+
   it("desconectado e sem cache, fica sem foto", async () => {
     const conversationId = await (async () => {
       await connect()

@@ -32,9 +32,15 @@ export class FakeWhatsAppClient implements WhatsAppClient {
   /** Profile picture links by jid; absent means no picture. */
   pictures = new Map<string, string>()
   pictureRequests: string[] = []
+  /** Makes the next picture queries throw, to simulate failures. */
+  failPictures = 0
 
   async profilePictureUrl(jid: string) {
     this.pictureRequests.push(jid)
+    if (this.failPictures > 0) {
+      this.failPictures -= 1
+      throw new Error("timed out")
+    }
     return this.pictures.get(jid) ?? null
   }
 

@@ -54,7 +54,18 @@ async function download(url: string): Promise<Avatar | "expired" | null> {
 async function refresh(
   contact: WhatsAppContact
 ): Promise<string | null | "offline"> {
-  const url = await whatsappSessionService.profilePictureUrl(contact.whatsappId)
+  let url: string | null | "offline"
+  try {
+    url = await whatsappSessionService.profilePictureUrl(contact.whatsappId)
+  } catch (error) {
+    // A picture is never worth an error page: no picture for now, and
+    // nothing cached, so the next view tries again.
+    console.warn(
+      `[whatsapp] não foi possível buscar a foto de ${contact.whatsappId}`,
+      error
+    )
+    return "offline"
+  }
   if (url !== "offline") {
     await whatsappConversationRepository.setProfilePicture(contact.id, url)
   }
