@@ -27,6 +27,19 @@ const envSchema = z.object({
   CRAWLER_USER_AGENT: z
     .string()
     .default("LeadFinder/1.0 (+local research tool)"),
+  /** Turns the WhatsApp inbox (Baileys) on or off. */
+  WHATSAPP_ENABLED: z.stringbool().default(true),
+  WHATSAPP_SESSION_NAME: z
+    .string()
+    .regex(/^[\w-]+$/, "Use apenas letras, números, _ e -")
+    .default("lead-finder"),
+  /** Folder holding the session credentials. Never commit it. */
+  WHATSAPP_SESSION_DIR: z.string().min(1).default(".whatsapp-session"),
+  /** History window imported on the very first connection. */
+  WHATSAPP_INITIAL_SYNC_DAYS: z.coerce.number().int().min(1).max(90).default(7),
+  /** Overlap with the previous sync, so clock skew never opens a gap. */
+  WHATSAPP_SYNC_SAFETY_WINDOW_MIN: z.coerce.number().int().min(0).default(1440),
+  WHATSAPP_INCLUDE_GROUPS: z.stringbool().default(false),
 })
 
 export type Env = z.infer<typeof envSchema>

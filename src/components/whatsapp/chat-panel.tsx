@@ -1,0 +1,274 @@
+"use client"
+
+import * as React from "react"
+import { cn } from "cn"
+import {
+  AlertCircle,
+  Check,
+  CheckCheck,
+  Clock,
+  Loader2,
+  MessageSquare,
+  Send,
+} from "lucide-react"
+
+import { EmptyState } from "@/components/common/empty-state"
+import { ErrorState } from "@/components/common/error-state"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  formatWhatsAppPhone,
+  WHATSAPP_MEDIA_PLACEHOLDERS,
+  type WhatsAppMessageStatus,
+  type WhatsAppMessageType,
+} from "@/domain/whatsapp"
+import type { WhatsAppMessageDTO } from "@/types/api"
+import {
+  useConversation,
+  useMarkConversationRead,
+  useMessages,
+  useSendMessage,
+} from "@/viewmodels/use-whatsapp"
+
+const timeFormatter = new Intl.DateTimeFormat("pt-BR", {
+  hour: "2-digit",
+  minute: "2-digit",
+})
+const dayFormatter = new Intl.DateTimeFormat("pt-BR", {
+  weekday: "long",
+  day: "2-digit",
+  month: "long",
+})
+
+function dayKey(value: string) {
+  return new Date(value).toDateString()
+}
+
+function dayLabel(value: string) {
+  const date = new Date(value)
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+  if (date.toDateString() === today.toDateString()) return "Hoje"
+  if (date.toDateString() === yesterday.toDateString()) return "Ontem"
+  return dayFormatter.format(date)
+}
+
+function StatusIcon({ status }: { status: WhatsAppMessageStatus }) {
+  switch (status) {
+    case "PENDING":
+      return <Clock className="size-3.5" aria-label="Enviando" />
+    case "SENT":
+      return <Check className="size-3.5" aria-label="Enviada" />
+    case "DELIVERED":
+      return <CheckCheck className="size-3.5" aria-label="Entregue" />
+    case "READ":
+      return <CheckCheck className="size-3.5 text-sky-300" aria-label="Lida" />
+    case "ERROR":
+      return <AlertCircle className="size-3.5" aria-label="Falhou" />
+    default:
+      return null
+  }
+}
+
+function MessageBubble({ message }: { message: WhatsAppMessageDTO }) {
+  const type = message.type as WhatsAppMessageType
+  const placeholder = WHATSAPP_MEDIA_PLACEHOLDERS[type]
+
+  return (
+    <div
+      className={cn("flex", message.fromMe ? "justify-end" : "justify-start")}
+    >
+      <div
+        className={cn(
+          "max-w-[78%] rounded-lg px-3 py-1.5 text-sm shadow-xs",
+          message.fromMe
+            ? "bg-primary text-primary-foreground rounded-br-sm"
+            : "bg-muted rounded-bl-sm"
+        )}
+      >
+        {type !== "text" && placeholder ? (
+          <p className="italic opacity-80">{placeholder}</p>
+        ) : null}
+        {message.body ? (
+          <p className="break-words whitespace-pre-wrap">{message.body}</p>
+        ) : null}
+        <div
+          className={cn(
+            "tabular mt-0.5 flex items-center justify-end gap-1 text-[11px]",
+            message.fromMe
+              ? "text-primary-foreground/70"
+              : "text-muted-foreground"
+          )}
+        >
+          {timeFormatter.format(new Date(message.timestamp))}
+          {message.fromMe ? (
+            <StatusIcon status={message.status as WhatsAppMessageStatus} />
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Composer({
+  conversationId,
+  online,
+}: {
+  conversationId: string
+  online: boolean
+}) {
+  const send = useSendMessage(conversationId)
+  const [draft, setDraft] = React.useState("")
+
+  const submit = async () => {
+    const text = draft.trim()
+    if (!text || !online) return
+    await send.mutateAsync(text)
+    setDraft("")
+  }
+
+  return (
+    <div className="border-t p-3">
+      <div className="flex items-end gap-2">
+        <Textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            // Enter sends; Shift+Enter breaks the line, as in WhatsApp Web.
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault()
+              void submit()
+            }
+          }}
+          placeholder={
+            online
+              ? "Digite uma mensagem..."
+              : "Conecte o WhatsApp para enviar mensagens"
+          }
+          disabled={!online || send.isPending}
+          rows={1}
+          className="max-h-40 min-h-10 resize-none"
+          aria-label="Mensagem"
+        />
+        <Button
+          onClick={submit}
+          disabled={!online || !draft.trim() || send.isPending}
+          aria-label="Enviar"
+        >
+          {send.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Send className="size-4" />
+          )}
+          <span className="hidden sm:inline">Enviar</span>
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function ChatPanel({
+  conversationId,
+  online,
+}: {
+  conversationId: string
+  online: boolean
+}) {
+  const detail = useConversation(conversationId)
+  const messages = useMessages(conversationId)
+  const markRead = useMarkConversationRead()
+  const sentinel = React.useRef<HTMLDivElement>(null)
+
+  const unread = detail.data?.conversation.unreadCount ?? 0
+  const { mutate: markAsRead } = markRead
+  React.useEffect(() => {
+    if (unread > 0) markAsRead(conversationId)
+  }, [conversationId, unread, markAsRead])
+
+  // Older pages load when the top of the history scrolls into view.
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = messages
+  React.useEffect(() => {
+    const node = sentinel.current
+    if (!node || !hasNextPage) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && !isFetchingNextPage) {
+        void fetchNextPage()
+      }
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+
+  // Newest first, as the API returns them; the column-reverse container
+  // shows them bottom-up and keeps the scroll pinned to the latest message.
+  const items = messages.data?.pages.flatMap((page) => page.items) ?? []
+  const rows: React.ReactNode[] = []
+  items.forEach((message, index) => {
+    rows.push(<MessageBubble key={message.id} message={message} />)
+    const older = items[index + 1]
+    if (!older || dayKey(older.timestamp) !== dayKey(message.timestamp)) {
+      rows.push(
+        <div key={`day-${message.id}`} className="flex justify-center py-2">
+          <span className="bg-muted text-muted-foreground rounded-full px-3 py-0.5 text-xs capitalize">
+            {dayLabel(message.timestamp)}
+          </span>
+        </div>
+      )
+    }
+  })
+
+  const conversation = detail.data?.conversation
+
+  return (
+    <div className="flex min-h-0 flex-col">
+      <div className="flex items-center gap-3 border-b px-4 py-3">
+        {conversation ? (
+          <div className="min-w-0">
+            <p className="truncate font-medium">{conversation.title}</p>
+            {conversation.phone ? (
+              <p className="text-muted-foreground text-xs">
+                {formatWhatsAppPhone(conversation.phone)}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <Skeleton className="h-10 w-48" />
+        )}
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col-reverse gap-1.5 overflow-y-auto p-4">
+        {messages.isError ? (
+          <ErrorState error={messages.error} />
+        ) : messages.isPending ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton
+                key={index}
+                className={cn("h-10 w-2/3", index % 2 && "ml-auto")}
+              />
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={MessageSquare}
+            title="Nenhuma mensagem salva"
+            description="As mensagens desta conversa aparecem aqui."
+          />
+        ) : (
+          <>
+            {rows}
+            <div ref={sentinel} className="flex justify-center py-1">
+              {isFetchingNextPage ? (
+                <Loader2 className="text-muted-foreground size-4 animate-spin" />
+              ) : null}
+            </div>
+          </>
+        )}
+      </div>
+
+      <Composer conversationId={conversationId} online={online} />
+    </div>
+  )
+}

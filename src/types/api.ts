@@ -98,3 +98,26 @@ export type BoardDTO = { columns: BoardColumnDTO[] }
 
 export type NoteDTO = Serialized<Note>
 export type NotesDTO = { notes: NoteDTO[] }
+
+export type WhatsAppSnapshotDTO = Serialized<
+  import("@/services/whatsapp/session.service").WhatsAppSnapshot
+>
+export type WhatsAppConversationDTO = Serialized<
+  import("@/domain/whatsapp").WhatsAppConversation
+>
+export type WhatsAppContactDTO = Serialized<
+  import("@/domain/whatsapp").WhatsAppContact
+>
+export type WhatsAppMessageDTO = Serialized<
+  import("@/domain/whatsapp").WhatsAppMessage
+>
+export type WhatsAppConversationDetailDTO = {
+  conversation: WhatsAppConversationDTO
+  contact: WhatsAppContactDTO | null
+  lead: import("@/services/whatsapp/conversation.service").LeadSummary | null
+}
+export type WhatsAppMessagesPageDTO = {
+  items: WhatsAppMessageDTO[]
+  /** Pass as `before` to load the next, older page; null at the start. */
+  nextCursor: string | null
+}

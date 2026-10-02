@@ -87,6 +87,20 @@ dedicado para isolá-las.
 - Dashboard com métricas do funil em destaque e taxa de conversão
 - Dark mode
 
+### WhatsApp
+
+- Conecta sua conta por QR Code ([Baileys](https://github.com/WhiskeySockets/Baileys),
+  conexão direta, sem Docker nem navegador)
+- A sessão fica salva localmente: reiniciar o CRM reconecta sem novo QR Code
+- **Sincroniza ao abrir**: mensagens recebidas com o CRM fechado são entregues
+  pelo WhatsApp na reconexão e gravadas no MongoDB
+- Sincronização idempotente: cada mensagem é única pelo id do WhatsApp, então
+  reconexões, falhas no meio e "Sincronizar agora" nunca duplicam nada
+- Lista de conversas com busca, histórico paginado, envio e recebimento em
+  tempo real (SSE), sem refresh
+- Vínculo automático com o lead quando um único lead tem o mesmo telefone;
+  vínculo manual para os demais
+
 ---
 
 ## Stack
@@ -211,18 +225,24 @@ Japonês e Churrascaria no mesmo bairro, chega-se a 200+ leads únicos.
 
 Copie `.env.example` para `.env.local` e ajuste.
 
-| Variável                    | Padrão                                  | Descrição                                                                  |
-| --------------------------- | --------------------------------------- | -------------------------------------------------------------------------- |
-| `MONGODB_URI`               | `mongodb://127.0.0.1:27017/lead-finder` | Conexão do MongoDB.                                                        |
-| `PLACES_SOURCE`             | `mock`                                  | `mock`, `osm` ou `google`.                                                 |
-| `GOOGLE_MAPS_API_KEY`       | —                                       | Obrigatória quando a fonte é `google`.                                     |
-| `GOOGLE_PLACES_ENDPOINT`    | endpoint oficial                        | Raramente precisa mudar.                                                   |
-| `OVERPASS_ENDPOINT`         | endpoint público                        | Usado pela fonte `osm`.                                                    |
-| `CRAWLER_CONCURRENCY`       | `2`                                     | Sites acessados em paralelo no enriquecimento.                             |
-| `CRAWLER_REQUEST_DELAY_MS`  | `1200`                                  | Intervalo mínimo entre requisições.                                        |
-| `CRAWLER_TIMEOUT_MS`        | `15000`                                 | Tempo limite por requisição.                                               |
-| `CRAWLER_MAX_CONTACT_PAGES` | `2`                                     | Páginas de contato visitadas quando a home não traz e-mail (`0` desativa). |
-| `CRAWLER_USER_AGENT`        | `LeadFinder/1.0 …`                      | Identificação do crawler.                                                  |
+| Variável                          | Padrão                                  | Descrição                                                                  |
+| --------------------------------- | --------------------------------------- | -------------------------------------------------------------------------- |
+| `MONGODB_URI`                     | `mongodb://127.0.0.1:27017/lead-finder` | Conexão do MongoDB.                                                        |
+| `PLACES_SOURCE`                   | `mock`                                  | `mock`, `osm` ou `google`.                                                 |
+| `GOOGLE_MAPS_API_KEY`             | —                                       | Obrigatória quando a fonte é `google`.                                     |
+| `GOOGLE_PLACES_ENDPOINT`          | endpoint oficial                        | Raramente precisa mudar.                                                   |
+| `OVERPASS_ENDPOINT`               | endpoint público                        | Usado pela fonte `osm`.                                                    |
+| `CRAWLER_CONCURRENCY`             | `2`                                     | Sites acessados em paralelo no enriquecimento.                             |
+| `CRAWLER_REQUEST_DELAY_MS`        | `1200`                                  | Intervalo mínimo entre requisições.                                        |
+| `CRAWLER_TIMEOUT_MS`              | `15000`                                 | Tempo limite por requisição.                                               |
+| `CRAWLER_MAX_CONTACT_PAGES`       | `2`                                     | Páginas de contato visitadas quando a home não traz e-mail (`0` desativa). |
+| `CRAWLER_USER_AGENT`              | `LeadFinder/1.0 …`                      | Identificação do crawler.                                                  |
+| `WHATSAPP_ENABLED`                | `true`                                  | Liga a caixa de entrada do WhatsApp.                                       |
+| `WHATSAPP_SESSION_NAME`           | `lead-finder`                           | Nome da sessão (subpasta da sessão).                                       |
+| `WHATSAPP_SESSION_DIR`            | `.whatsapp-session`                     | Pasta das credenciais da sessão. **Nunca versione.**                       |
+| `WHATSAPP_INITIAL_SYNC_DAYS`      | `7`                                     | Dias de histórico importados na primeira conexão.                          |
+| `WHATSAPP_SYNC_SAFETY_WINDOW_MIN` | `1440`                                  | Sobreposição com a sincronização anterior, em minutos.                     |
+| `WHATSAPP_INCLUDE_GROUPS`         | `false`                                 | Importa também conversas de grupo.                                         |
 
 > **Nunca versione o `.env.local`.** Ele está no `.gitignore`, junto com
 > variantes como `.env*.bak`.
@@ -360,6 +380,13 @@ API, não do sistema. Contorna-se com buscas mais específicas.
 
 **Alguns sites bloqueiam o crawler.** Respostas 403 são comuns em sites com
 proteção anti-bot. O sistema registra o motivo e segue adiante.
+
+**WhatsApp não oficial.** A integração usa o protocolo do WhatsApp Web, não a
+API oficial da Meta. Envio em massa pode levar a bloqueio da conta. O CRM só
+recebe mensagens enquanto está aberto; o que chega com ele fechado é entregue
+na próxima conexão. Se o aparelho ficar muito tempo sem conectar, o WhatsApp
+pode desvinculá-lo e será preciso ler o QR Code de novo. Mídias aparecem como
+marcador (`[imagem]`, `[áudio]`), sem download.
 
 ---
 
