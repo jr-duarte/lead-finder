@@ -275,11 +275,17 @@ export function createBaileysClient(
       ])
       const total = cap?.total_quota
       const used = cap?.used_quota
+      // Accounts outside the capping program get total_quota 0 — that means
+      // "no cap", not "cap used up". Only a positive quota or an explicit
+      // CAPPED status counts as a limit.
+      const capped =
+        (typeof total === "number" && total > 0) ||
+        cap?.capping_status === "CAPPED"
       return {
         restricted: Boolean(lock?.isActive),
         restrictedUntil: lock?.timeEnforcementEnds ?? undefined,
         newChatsRemaining:
-          typeof total === "number" && typeof used === "number"
+          capped && typeof total === "number" && typeof used === "number"
             ? Math.max(0, total - used)
             : undefined,
       }
