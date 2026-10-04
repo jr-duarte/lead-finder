@@ -22,6 +22,7 @@ import type {
   WhatsAppSnapshotDTO,
 } from "@/types/api"
 import { businessKeys } from "@/viewmodels/use-businesses"
+import { followUpKeys } from "@/viewmodels/use-follow-ups"
 import { noteKeys } from "@/viewmodels/use-notes"
 import { pipelineKeys } from "@/viewmodels/use-pipeline"
 
@@ -116,6 +117,7 @@ export function useWhatsAppEvents() {
           void queryClient.invalidateQueries({ queryKey: businessKeys.all })
           void queryClient.invalidateQueries({ queryKey: pipelineKeys.all })
           void queryClient.invalidateQueries({ queryKey: noteKeys.all })
+          void queryClient.invalidateQueries({ queryKey: followUpKeys.all })
           void queryClient.invalidateQueries({
             queryKey: whatsappKeys.conversations(),
           })

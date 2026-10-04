@@ -1,5 +1,6 @@
 import { Types } from "mongoose"
 
+import type { AutoReplySource, AutoReplyVerdict } from "@/domain/follow-up"
 import {
   lowerMessageStatuses,
   type WhatsAppMediaStatus,
@@ -74,6 +75,7 @@ export function toWhatsAppMessage(raw: RawMessage): WhatsAppMessage {
       media?.status === "stored"
         ? whatsappMediaPath(String(raw._id))
         : undefined,
+    autoReply: (raw.autoReply?.verdict as AutoReplyVerdict) ?? undefined,
     createdAt: raw.createdAt ?? raw.timestamp,
   }
 }
@@ -378,6 +380,44 @@ export const whatsappMessageRepository = {
       { conversationId: fromId },
       { $set: { conversationId: new Types.ObjectId(toId) } }
     ).exec()
+  },
+
+  /** Records whether messages from the contact were automatic. */
+  async setAutoReply(
+    ids: string[],
+    verdict: AutoReplyVerdict,
+    source: AutoReplySource
+  ): Promise<void> {
+    await connectToDatabase()
+    const valid = ids.filter((id) => Types.ObjectId.isValid(id))
+    if (valid.length === 0) return
+    await WhatsAppMessageModel.updateMany(
+      { _id: { $in: valid }, fromMe: false },
+      { $set: { autoReply: { verdict, source } } }
+    ).exec()
+  },
+
+  /** Every message from the contact in a conversation, back to a person. */
+  async markConversationHuman(conversationId: string): Promise<void> {
+    await connectToDatabase()
+    if (!Types.ObjectId.isValid(conversationId)) return
+    await WhatsAppMessageModel.updateMany(
+      { conversationId, fromMe: false, "autoReply.verdict": { $ne: "human" } },
+      { $set: { autoReply: { verdict: "human", source: "manual" } } }
+    ).exec()
+  },
+
+  /** Replies still waiting for Claude's verdict, oldest first. */
+  async pendingAutoReplies(limit: number): Promise<WhatsAppMessage[]> {
+    await connectToDatabase()
+    const raw = await WhatsAppMessageModel.find({
+      "autoReply.verdict": "pending",
+    })
+      .sort({ timestamp: 1 })
+      .limit(limit)
+      .lean<RawMessage[]>()
+      .exec()
+    return raw.map(toWhatsAppMessage)
   },
 
   /** Recent messages in chronological order, e.g. as context for an AI. */

@@ -35,7 +35,8 @@ import {
   PipelineCardContent,
 } from "@/components/pipeline/pipeline-card"
 import { PIPELINE_COLUMNS, type PipelineStage } from "@/domain/pipeline"
-import type { BoardColumnDTO, BusinessDTO } from "@/types/api"
+import type { BoardColumnDTO, BusinessDTO, FollowUpDTO } from "@/types/api"
+import { useFollowUps } from "@/viewmodels/use-follow-ups"
 
 /** Columns that close the funnel get a muted treatment. */
 const STAGE_ACCENT: Partial<Record<PipelineStage, string>> = {
@@ -184,6 +185,17 @@ export function PipelineBoard({
   onRemove: (id: string) => void
 }) {
   const [dragging, setDragging] = React.useState<BusinessDTO | null>(null)
+  const followUps = useFollowUps()
+  const followUpByLead = React.useMemo(
+    () =>
+      new Map<string, FollowUpDTO>(
+        (followUps.data?.followUps ?? []).map((followUp) => [
+          followUp.businessId,
+          followUp,
+        ])
+      ),
+    [followUps.data]
+  )
   // The column under the pointer and the one the card came from, so every
   // column can animate relative to the move in progress.
   const [overStage, setOverStage] = React.useState<PipelineStage | null>(null)
@@ -315,6 +327,7 @@ export function PipelineBoard({
                   <PipelineCard
                     key={card.id}
                     business={card}
+                    followUp={followUpByLead.get(card.id)}
                     onRemove={() => onRemove(card.id)}
                   />
                 ))}

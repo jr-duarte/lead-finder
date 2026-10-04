@@ -3,6 +3,7 @@
  * Pure TypeScript: no Baileys, no Mongoose, no I/O.
  */
 
+import type { AutoReplyVerdict } from "@/domain/follow-up"
 import { analyzePhone } from "@/domain/phone"
 
 export const WHATSAPP_STATUS = [
@@ -264,6 +265,8 @@ export type WhatsAppMessage = {
   quoted?: WhatsAppQuote
   /** Where the browser loads the file from; only once it is stored. */
   mediaUrl?: string
+  /** For messages from the contact: typed by a person or sent by a bot. */
+  autoReply?: AutoReplyVerdict
   createdAt: Date
 }
 

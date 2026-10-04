@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { apiError } from "@/lib/api"
 import { moveCardSchema, pipelineNoteSchema } from "@/schemas/pipeline"
+import { followUpService } from "@/services/follow-up/follow-up.service"
 import { pipelineService } from "@/services/pipeline.service"
 
 export const dynamic = "force-dynamic"
@@ -38,6 +39,8 @@ export async function PATCH(request: Request, { params }: Context) {
         { status: 404 }
       )
     }
+    // A card moved out of "Contatado" no longer gets its follow-up.
+    await followUpService.onLeadsMoved([id])
 
     return NextResponse.json(business)
   } catch (error) {

@@ -5,6 +5,7 @@ import { cn } from "cn"
 import { toast } from "sonner"
 import {
   AlertCircle,
+  Bot,
   Check,
   CheckCheck,
   Clock,
@@ -132,6 +133,15 @@ function MessageBubble({
         {message.type !== "text" ? <MessageMedia message={message} /> : null}
         {message.body ? (
           <p className="wrap-break-word whitespace-pre-wrap">{message.body}</p>
+        ) : null}
+        {message.autoReply === "automated" ? (
+          <p
+            className="text-muted-foreground mt-1 flex items-center gap-1 text-[11px] italic"
+            title="Saudação ou aviso enviado por robô. Não conta como resposta do lead."
+          >
+            <Bot className="size-3" />
+            Resposta automática
+          </p>
         ) : null}
         <div
           className={cn(

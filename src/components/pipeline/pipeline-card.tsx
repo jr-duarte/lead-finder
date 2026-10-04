@@ -9,7 +9,9 @@ import {
   GripVertical,
   MoreHorizontal,
   Phone,
+  Repeat,
   Star,
+  ThumbsDown,
   Trash2,
 } from "lucide-react"
 
@@ -23,16 +25,90 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import type { FollowUpStatus } from "@/domain/follow-up"
 import { formatPhone, formatRating } from "@/lib/format"
-import type { BusinessDTO } from "@/types/api"
+import type { BusinessDTO, FollowUpDTO } from "@/types/api"
+import { useMarkFollowUpsLost } from "@/viewmodels/use-follow-ups"
+
+/** What the card says about the lead's follow-up while it is in play. */
+const FOLLOW_UP_HINTS: Partial<
+  Record<FollowUpStatus, { label: string; className: string }>
+> = {
+  PENDING: {
+    label: "Follow-up sendo escrito",
+    className: "text-muted-foreground",
+  },
+  GENERATING: {
+    label: "Follow-up sendo escrito",
+    className: "text-muted-foreground",
+  },
+  READY: {
+    label: "Follow-up para aprovar",
+    className: "border-primary/40 text-primary bg-primary/10",
+  },
+  FAILED: {
+    label: "Follow-up falhou",
+    className: "border-destructive/40 text-destructive bg-destructive/10",
+  },
+  APPROVED: {
+    label: "Follow-up na fila",
+    className: "border-primary/40 text-primary bg-primary/10",
+  },
+  SENDING: {
+    label: "Follow-up na fila",
+    className: "border-primary/40 text-primary bg-primary/10",
+  },
+  SENT: {
+    label: "Follow-up enviado",
+    className: "border-success/40 text-success bg-success/10",
+  },
+  NO_REPLY: {
+    label: "Sem resposta ao follow-up",
+    className: "border-destructive/40 text-destructive bg-destructive/10",
+  },
+}
+
+function FollowUpHint({ followUp }: { followUp: FollowUpDTO }) {
+  const lost = useMarkFollowUpsLost()
+  const hint = FOLLOW_UP_HINTS[followUp.status as FollowUpStatus]
+  if (!hint) return null
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Link href="/follow-ups">
+        <Badge
+          variant="outline"
+          className={cn("gap-1 text-[10px]", hint.className)}
+        >
+          <Repeat className="size-3" />
+          {hint.label}
+        </Badge>
+      </Link>
+      {followUp.status === "NO_REPLY" ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-[11px]"
+          onClick={() => lost.mutate([followUp.id])}
+          disabled={lost.isPending}
+        >
+          <ThumbsDown className="size-3" />
+          Mover para Perdido
+        </Button>
+      ) : null}
+    </div>
+  )
+}
 
 /** Card contents, shared by the sortable card and the drag overlay. */
 export function PipelineCardContent({
   business,
+  followUp,
   onRemove,
   dragHandle,
 }: {
   business: BusinessDTO
+  followUp?: FollowUpDTO
   onRemove?: () => void
   dragHandle?: React.ReactNode
 }) {
@@ -118,6 +194,8 @@ export function PipelineCardContent({
             Sem website
           </Badge>
         ) : null}
+
+        {followUp ? <FollowUpHint followUp={followUp} /> : null}
       </div>
     </div>
   )
@@ -129,9 +207,11 @@ export function PipelineCardContent({
  */
 export function PipelineCard({
   business,
+  followUp,
   onRemove,
 }: {
   business: BusinessDTO
+  followUp?: FollowUpDTO
   onRemove: () => void
 }) {
   const {
@@ -167,6 +247,7 @@ export function PipelineCard({
     >
       <PipelineCardContent
         business={business}
+        followUp={followUp}
         onRemove={onRemove}
         dragHandle={
           <button

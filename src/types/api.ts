@@ -146,3 +146,11 @@ export type AddLeadsResultDTO = {
 export type CampaignCreateResultDTO = AddLeadsResultDTO & {
   campaign: CampaignDTO
 }
+
+export type FollowUpDTO = Serialized<import("@/domain/follow-up").FollowUp>
+export type FollowUpListDTO = {
+  followUps: FollowUpDTO[]
+  counts: import("@/domain/follow-up").FollowUpCounts
+}
+export type AutoReplyReviewItemDTO =
+  import("@/services/follow-up/follow-up.service").AutoReplyReviewItem

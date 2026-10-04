@@ -405,6 +405,21 @@ export const campaignRepository = {
     )
   },
 
+  /** The campaign that sent this lead its first message, if any. */
+  async sentCampaignOf(businessId: string): Promise<Campaign | null> {
+    await connectToDatabase()
+    if (!Types.ObjectId.isValid(businessId)) return null
+    const item = await CampaignItemModel.findOne({
+      businessId: new Types.ObjectId(businessId),
+      status: { $in: ["SENT", "REPLIED"] },
+    })
+      .sort({ sentAt: -1 })
+      .select("campaignId")
+      .lean<{ campaignId: Types.ObjectId }>()
+      .exec()
+    return item ? this.findById(String(item.campaignId)) : null
+  },
+
   /** Sent items of these leads, to mark them as answered. */
   async markReplied(businessIds: string[]): Promise<string[]> {
     await connectToDatabase()

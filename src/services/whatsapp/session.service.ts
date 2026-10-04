@@ -28,9 +28,12 @@ import type {
 } from "@/lib/whatsapp/client"
 import { businessRepository } from "@/repositories/business.repository"
 import { campaignRepository } from "@/repositories/campaign.repository"
+import { followUpRepository } from "@/repositories/follow-up.repository"
 import { whatsappConversationRepository } from "@/repositories/whatsapp-conversation.repository"
 import { whatsappMessageRepository } from "@/repositories/whatsapp-message.repository"
 import { whatsappSessionRepository } from "@/repositories/whatsapp-session.repository"
+import { autoReplyClassifier } from "@/services/follow-up/auto-reply"
+import { followUpWatch } from "@/services/follow-up/watch"
 import { emitWhatsAppEvent } from "@/services/whatsapp/events"
 import {
   ingestBatch,
@@ -415,8 +418,22 @@ async function markCampaignReplies(conversationIds: string[]): Promise<void> {
  */
 async function applyPipelineAutomation(result: IngestResult): Promise<void> {
   try {
-    await markCampaignReplies(result.repliedConversationIds)
-    const changes = await advanceLeadStages(result)
+    // Automatic replies (greetings, away messages) are not answers: the
+    // lead stays in "Contatado" and still gets its follow-up.
+    const answered = await autoReplyClassifier.classifyReplies(
+      result.repliedConversationIds,
+      result.incomingMessageIds
+    )
+    await markCampaignReplies(answered)
+    const changes = await advanceLeadStages({
+      contactedConversationIds: result.contactedConversationIds,
+      repliedConversationIds: answered,
+    })
+    // An answer or a message typed by hand cancels a follow-up not sent yet.
+    await followUpWatch.check([
+      ...result.repliedConversationIds,
+      ...result.contactedConversationIds,
+    ])
     for (const change of changes) {
       log(
         `lead ${change.businessId} movido para ${change.to}${change.from ? ` (era ${change.from})` : " (entrou no funil)"}`
@@ -1016,6 +1033,10 @@ export const whatsappSessionService = {
         await whatsappMessageRepository.deleteByConversation(conversationId)
       await whatsappConversationRepository.deleteById(conversationId)
       await campaignRepository.clearConversation(conversationId)
+      await followUpRepository.cancelByConversation(
+        conversationId,
+        "A conversa foi excluída."
+      )
       return { messages, mediaKeys, title: conversation.title }
     })
     if (!result) return false

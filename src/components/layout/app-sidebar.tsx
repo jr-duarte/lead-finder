@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Megaphone,
   MessageCircle,
+  Repeat,
   Search,
   Settings,
   Sparkles,
@@ -44,6 +45,7 @@ const LEADS: NavItem[] = [
   { title: "Funil", href: "/pipeline", icon: KanbanSquare },
   { title: "WhatsApp", href: "/whatsapp", icon: MessageCircle },
   { title: "Campanhas", href: "/campaigns", icon: Megaphone },
+  { title: "Follow-ups", href: "/follow-ups", icon: Repeat },
 ]
 
 const SYSTEM: NavItem[] = [

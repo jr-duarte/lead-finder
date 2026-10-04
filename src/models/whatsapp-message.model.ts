@@ -6,6 +6,7 @@ import {
   type Model,
 } from "mongoose"
 
+import { AUTO_REPLY_SOURCES, AUTO_REPLY_VERDICTS } from "@/domain/follow-up"
 import {
   WHATSAPP_MEDIA_STATUS,
   WHATSAPP_MESSAGE_STATUS,
@@ -36,6 +37,15 @@ const quoteSchema = new Schema(
   { _id: false }
 )
 
+/** Whether a message from the contact was typed by a person or a bot. */
+const autoReplySchema = new Schema(
+  {
+    verdict: { type: String, enum: AUTO_REPLY_VERDICTS, required: true },
+    source: { type: String, enum: AUTO_REPLY_SOURCES, required: true },
+  },
+  { _id: false }
+)
+
 const whatsappMessageSchema = new Schema(
   {
     conversationId: {
@@ -57,6 +67,7 @@ const whatsappMessageSchema = new Schema(
     status: { type: String, enum: WHATSAPP_MESSAGE_STATUS },
     media: { type: mediaSchema, default: undefined },
     quoted: { type: quoteSchema, default: undefined },
+    autoReply: { type: autoReplySchema, default: undefined },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },
@@ -66,6 +77,11 @@ const whatsappMessageSchema = new Schema(
 
 // History is paginated per conversation, newest first.
 whatsappMessageSchema.index({ conversationId: 1, timestamp: -1 })
+// Replies waiting for Claude to say whether they were automatic.
+whatsappMessageSchema.index(
+  { "autoReply.verdict": 1 },
+  { partialFilterExpression: { "autoReply.verdict": "pending" } }
+)
 
 export type WhatsAppMessageDocument = InferSchemaType<
   typeof whatsappMessageSchema

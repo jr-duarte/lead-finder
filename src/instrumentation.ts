@@ -33,4 +33,11 @@ export async function register() {
   void campaignService.boot().catch((error) => {
     console.error("[campanha] falha ao retomar campanhas", error)
   })
+
+  // Follow-ups: leads in "Contatado" that did not answer get one more message.
+  const { followUpService } =
+    await import("@/services/follow-up/follow-up.service")
+  void followUpService.boot().catch((error) => {
+    console.error("[follow-up] falha ao iniciar", error)
+  })
 }

@@ -17,6 +17,8 @@ export type IngestResult = {
   newMessages: number
   /** Conversations that got a new message from the contact. */
   repliedConversationIds: string[]
+  /** WhatsApp ids of the new messages from contacts. */
+  incomingMessageIds: string[]
   /** Conversations that got a new message sent by us. */
   contactedConversationIds: string[]
   /** Files of the new messages, still to be fetched and stored. */
@@ -250,6 +252,9 @@ export async function ingestBatch(
         : []
     }),
     repliedConversationIds: [...newIncoming.keys()],
+    incomingMessageIds: inserted.flatMap((item) =>
+      item.fromMe ? [] : [item.whatsappMessageId]
+    ),
     contactedConversationIds: [...withNewOutgoing],
   }
 }

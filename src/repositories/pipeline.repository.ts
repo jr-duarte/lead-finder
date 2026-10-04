@@ -21,6 +21,18 @@ export const pipelineRepository = {
     return raw.map(toBusiness)
   },
 
+  /** The leads of one column, in board order. */
+  async inStage(stage: PipelineStage): Promise<Business[]> {
+    await connectToDatabase()
+
+    const raw = await BusinessModel.find({ "pipeline.stage": stage })
+      .sort({ "pipeline.position": 1 })
+      .lean<RawBusiness[]>()
+      .exec()
+
+    return raw.map(toBusiness)
+  },
+
   /** Highest position in a column, used to append new cards at the end. */
   async lastPosition(stage: PipelineStage): Promise<number> {
     await connectToDatabase()
