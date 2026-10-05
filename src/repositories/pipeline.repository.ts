@@ -122,6 +122,61 @@ export const pipelineRepository = {
     return raw ? toBusiness(raw) : null
   },
 
+  /**
+   * Puts several leads in one stage at once, appended to the end of the
+   * column. Leads off the board are added; leads already in the stage stay
+   * where they are.
+   */
+  async setStage(
+    ids: string[],
+    stage: PipelineStage
+  ): Promise<{ moved: number; added: number }> {
+    await connectToDatabase()
+
+    const valid = ids.filter((id) => Types.ObjectId.isValid(id))
+    if (valid.length === 0) return { moved: 0, added: 0 }
+
+    const docs = await BusinessModel.find({
+      _id: { $in: valid },
+      "pipeline.stage": { $ne: stage },
+    })
+      .select("_id pipeline.stage")
+      .lean<{ _id: Types.ObjectId; pipeline?: { stage?: string } }[]>()
+      .exec()
+
+    if (docs.length === 0) return { moved: 0, added: 0 }
+
+    let position = (await this.lastPosition(stage)) + 1
+    const now = new Date()
+    let added = 0
+
+    await BusinessModel.bulkWrite(
+      docs.map((doc) => {
+        const onBoard = Boolean(doc.pipeline?.stage)
+        if (!onBoard) added += 1
+
+        return {
+          updateOne: {
+            filter: { _id: doc._id },
+            update: {
+              $set: onBoard
+                ? {
+                    "pipeline.stage": stage,
+                    "pipeline.position": position++,
+                    "pipeline.movedAt": now,
+                  }
+                : {
+                    pipeline: { stage, position: position++, enteredAt: now },
+                  },
+            },
+          },
+        }
+      })
+    )
+
+    return { moved: docs.length - added, added }
+  },
+
   async setNote(id: string, note: string): Promise<Business | null> {
     await connectToDatabase()
     if (!Types.ObjectId.isValid(id)) return null

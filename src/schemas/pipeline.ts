@@ -15,6 +15,12 @@ export const moveCardSchema = z.object({
   position: z.coerce.number().int().min(0).optional(),
 })
 
+/** Bulk stage change; leads off the board are added to it. */
+export const setStageSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1, "Selecione ao menos uma empresa"),
+  stage: z.enum(PIPELINE_STAGES),
+})
+
 export const removeFromPipelineSchema = z.object({
   ids: z.array(z.string().min(1)).min(1),
 })

@@ -40,6 +40,13 @@ export const pipelineService = {
     return pipelineRepository.move(id, stage, position)
   },
 
+  setStage(
+    ids: string[],
+    stage: PipelineStage
+  ): Promise<{ moved: number; added: number }> {
+    return pipelineRepository.setStage(ids, stage)
+  },
+
   setNote(id: string, note: string): Promise<Business | null> {
     return pipelineRepository.setNote(id, note)
   },

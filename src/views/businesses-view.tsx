@@ -24,7 +24,7 @@ import {
   useFilterOptions,
 } from "@/viewmodels/use-businesses"
 import { useBusinessFilters } from "@/viewmodels/use-business-filters"
-import { useAddToPipeline } from "@/viewmodels/use-pipeline"
+import { useAddToPipeline, useSetStage } from "@/viewmodels/use-pipeline"
 
 export function BusinessesView() {
   const {
@@ -46,6 +46,7 @@ export function BusinessesView() {
   const [isCreating, setIsCreating] = React.useState(false)
   const [isAddingToCampaign, setIsAddingToCampaign] = React.useState(false)
   const addToPipeline = useAddToPipeline()
+  const setStage = useSetStage()
 
   const items = React.useMemo(
     () => businessesQuery.data?.items ?? [],
@@ -151,10 +152,15 @@ export function BusinessesView() {
           await addToPipeline.mutateAsync({ ids: selectedIds })
           setSelection([])
         }}
+        onSetStage={async (stage) => {
+          await setStage.mutateAsync({ ids: selectedIds, stage })
+          setSelection([])
+        }}
         onAddToCampaign={() => setIsAddingToCampaign(true)}
         onExport={() => exportBusinessesCsv(queryInput)}
         onDelete={handleBulkDelete}
         isEnriching={enrich.isPending}
+        isSettingStage={setStage.isPending}
         isDeleting={remove.isPending}
       />
 

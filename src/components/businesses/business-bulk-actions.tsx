@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import {
+  ArrowRightLeft,
+  ChevronDown,
   Download,
   KanbanSquare,
   Megaphone,
@@ -22,7 +24,20 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
+import {
+  PIPELINE_COLUMNS,
+  PIPELINE_STAGE_LABELS,
+  type PipelineStage,
+} from "@/domain/pipeline"
 
 /** Action bar shown while rows are selected. */
 export function BusinessBulkActions({
@@ -30,20 +45,24 @@ export function BusinessBulkActions({
   onClear,
   onEnrich,
   onAddToPipeline,
+  onSetStage,
   onAddToCampaign,
   onExport,
   onDelete,
   isEnriching,
+  isSettingStage,
   isDeleting,
 }: {
   count: number
   onClear: () => void
   onEnrich: () => void
   onAddToPipeline: () => void
+  onSetStage: (stage: PipelineStage) => void
   onAddToCampaign: () => void
   onExport: () => void
   onDelete: () => void
   isEnriching?: boolean
+  isSettingStage?: boolean
   isDeleting?: boolean
 }) {
   if (count === 0) return null
@@ -68,6 +87,25 @@ export function BusinessBulkActions({
           <KanbanSquare className="size-4" />
           Enviar para o funil
         </Button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline" disabled={isSettingStage}>
+              <ArrowRightLeft className="size-4" />
+              {isSettingStage ? "Alterando..." : "Alterar etapa"}
+              <ChevronDown className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuLabel>Mover para a etapa</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {PIPELINE_COLUMNS.map((stage) => (
+              <DropdownMenuItem key={stage} onClick={() => onSetStage(stage)}>
+                {PIPELINE_STAGE_LABELS[stage]}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <Button size="sm" variant="outline" onClick={onAddToCampaign}>
           <Megaphone className="size-4" />

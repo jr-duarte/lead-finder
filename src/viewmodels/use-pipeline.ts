@@ -54,6 +54,53 @@ export function useAddToPipeline() {
   })
 }
 
+/** Moves several leads to one stage; leads off the board are added to it. */
+export function useSetStage() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { ids: string[]; stage: PipelineStage }) =>
+      apiFetch<{ moved: number; added: number; unchanged: number }>(
+        "/api/pipeline",
+        { method: "PATCH", body: JSON.stringify(input) }
+      ),
+    onSuccess: ({ moved, added, unchanged }, { stage }) => {
+      const label = PIPELINE_STAGE_LABELS[stage]
+      const changed = moved + added
+
+      if (changed === 0) {
+        toast.info(`As selecionadas já estão em ${label}.`)
+      } else {
+        const details = [
+          added > 0
+            ? `${added} ${added === 1 ? "adicionada" : "adicionadas"} ao funil`
+            : null,
+          unchanged > 0
+            ? `${unchanged} já ${unchanged === 1 ? "estava" : "estavam"} em ${label}`
+            : null,
+        ].filter(Boolean)
+
+        toast.success(
+          changed === 1
+            ? `1 empresa movida para ${label}.`
+            : `${changed} empresas movidas para ${label}.`,
+          details.length > 0
+            ? { description: `${details.join("; ")}.` }
+            : undefined
+        )
+      }
+
+      void queryClient.invalidateQueries({ queryKey: pipelineKeys.all })
+      void queryClient.invalidateQueries({ queryKey: businessKeys.all })
+    },
+    onError: (error: Error) => {
+      toast.error("Não foi possível alterar a etapa", {
+        description: error.message,
+      })
+    },
+  })
+}
+
 /**
  * Moves a card. The board is updated optimistically so dragging feels
  * immediate, and rolled back if the request fails.

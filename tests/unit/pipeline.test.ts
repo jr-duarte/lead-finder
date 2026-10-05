@@ -95,6 +95,29 @@ describe("pipelineRepository", () => {
     expect(board.every((b) => b.pipeline?.stage === "NEW")).toBe(true)
   })
 
+  it("altera a etapa em massa, adicionando quem está fora do funil", async () => {
+    const [a, b, c] = await seed(["A", "B", "C"])
+    await pipelineRepository.add([a], "NEW")
+    await pipelineRepository.add([b], "MEETING")
+
+    const result = await pipelineRepository.setStage([a, b, c], "MEETING")
+
+    // B was already in the stage, so only A moves and C joins the board.
+    expect(result).toEqual({ moved: 1, added: 1 })
+
+    const board = await pipelineRepository.board()
+    expect(board).toHaveLength(3)
+    expect(board.every((item) => item.pipeline?.stage === "MEETING")).toBe(true)
+
+    const byId = new Map(board.map((item) => [item.id, item.pipeline]))
+    expect(byId.get(b)?.position).toBe(0)
+    expect(byId.get(a)?.movedAt).toBeDefined()
+    expect(byId.get(c)?.enteredAt).toBeDefined()
+    expect(
+      board.map((item) => item.pipeline?.position).sort((x, y) => x! - y!)
+    ).toEqual([0, 1, 2])
+  })
+
   it("move um card entre colunas", async () => {
     const [id] = await seed(["A"])
     await pipelineRepository.add([id], "NEW")
