@@ -174,8 +174,15 @@ export function BusinessFilters({
           <DateRangeFilter
             from={filters.collectedFrom}
             to={filters.collectedTo}
+            fromTime={filters.collectedFromTime}
+            toTime={filters.collectedToTime}
             onChange={(range) =>
-              onChange({ collectedFrom: range.from, collectedTo: range.to })
+              onChange({
+                collectedFrom: range.from,
+                collectedTo: range.to,
+                collectedFromTime: range.fromTime,
+                collectedToTime: range.toTime,
+              })
             }
           />
         </div>

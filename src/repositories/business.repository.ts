@@ -48,15 +48,23 @@ function presenceCondition(
   return null
 }
 
-/** Start or end of a "YYYY-MM-DD" day in Brasília (no daylight saving). */
+/**
+ * Start or end of a "YYYY-MM-DD" day in Brasília (no daylight saving). An
+ * optional "HH:mm" narrows it to that minute, whole minute included at the end.
+ */
 function brazilDay(
   value: string | undefined,
-  edge: "start" | "end"
+  edge: "start" | "end",
+  time?: string
 ): Date | undefined {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
-  const date = new Date(
-    `${value}T${edge === "start" ? "00:00:00.000" : "23:59:59.999"}-03:00`
-  )
+  const hasTime = time !== undefined && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)
+  const clock = hasTime
+    ? `${time}:${edge === "start" ? "00.000" : "59.999"}`
+    : edge === "start"
+      ? "00:00:00.000"
+      : "23:59:59.999"
+  const date = new Date(`${value}T${clock}-03:00`)
   return Number.isNaN(date.getTime()) ? undefined : date
 }
 
@@ -167,8 +175,12 @@ export function buildBusinessQuery(
   // day before in Brasília.
   if (filters.collectedFrom || filters.collectedTo) {
     const range: Record<string, Date> = {}
-    const from = brazilDay(filters.collectedFrom, "start")
-    const to = brazilDay(filters.collectedTo, "end")
+    const from = brazilDay(
+      filters.collectedFrom,
+      "start",
+      filters.collectedFromTime
+    )
+    const to = brazilDay(filters.collectedTo, "end", filters.collectedToTime)
     if (from) range.$gte = from
     if (to) range.$lte = to
     if (from || to) and.push({ collectedAt: range })

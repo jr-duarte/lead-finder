@@ -186,6 +186,37 @@ describe("filtro de data da coleta", () => {
     })
   })
 
+  it("aplica as horas no primeiro e no último dia, incluindo o minuto final", () => {
+    const query = buildBusinessQuery(
+      parse({
+        collectedFrom: "2026-10-01",
+        collectedTo: "2026-10-02",
+        collectedFromTime: "08:30",
+        collectedToTime: "18:00",
+      })
+    )
+    expect(query.$and).toContainEqual({
+      collectedAt: {
+        $gte: new Date("2026-10-01T11:30:00.000Z"),
+        $lte: new Date("2026-10-02T21:00:59.999Z"),
+      },
+    })
+  })
+
+  it("ignora horas sem data ou em formato inválido", () => {
+    const withoutDate = buildBusinessQuery(
+      parse({ collectedFromTime: "08:00" })
+    )
+    expect(JSON.stringify(withoutDate)).not.toContain("collectedAt")
+
+    const invalidTime = buildBusinessQuery(
+      parse({ collectedFrom: "2026-10-01", collectedFromTime: "25:00" })
+    )
+    expect(invalidTime.$and).toContainEqual({
+      collectedAt: { $gte: new Date("2026-10-01T03:00:00.000Z") },
+    })
+  })
+
   it("ignora datas em formato inválido", () => {
     const query = buildBusinessQuery(parse({ collectedFrom: "ontem" }))
     expect(JSON.stringify(query)).not.toContain("collectedAt")

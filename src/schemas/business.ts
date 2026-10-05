@@ -58,6 +58,10 @@ export const businessFiltersSchema = z.object({
     .transform((value) => value === "true"),
   collectedFrom: optionalString,
   collectedTo: optionalString,
+  /** "HH:mm" in Brasília; narrows the first day of the range. */
+  collectedFromTime: optionalString,
+  /** "HH:mm" in Brasília, inclusive; narrows the last day of the range. */
+  collectedToTime: optionalString,
   sortBy: z
     .enum(["name", "rating", "reviewsCount", "collectedAt", "city"])
     .default("collectedAt"),

@@ -19,6 +19,8 @@ export type FiltersState = {
   whatsapp: string
   collectedFrom: string
   collectedTo: string
+  collectedFromTime: string
+  collectedToTime: string
   hideClosed: string
   pipeline: string
   pipelineStage: string
@@ -42,6 +44,8 @@ export const DEFAULT_FILTERS: FiltersState = {
   whatsapp: "any",
   collectedFrom: "",
   collectedTo: "",
+  collectedFromTime: "",
+  collectedToTime: "",
   hideClosed: "true",
   pipeline: "any",
   pipelineStage: "",
@@ -81,6 +85,8 @@ export function useBusinessFilters() {
       whatsapp: read("whatsapp"),
       collectedFrom: read("collectedFrom"),
       collectedTo: read("collectedTo"),
+      collectedFromTime: read("collectedFromTime"),
+      collectedToTime: read("collectedToTime"),
       hideClosed: read("hideClosed"),
       pipeline: read("pipeline"),
       pipelineStage: read("pipelineStage"),
@@ -160,6 +166,8 @@ export function useBusinessFilters() {
       whatsapp: filters.whatsapp as BusinessFiltersInput["whatsapp"],
       collectedFrom: filters.collectedFrom || undefined,
       collectedTo: filters.collectedTo || undefined,
+      collectedFromTime: filters.collectedFromTime || undefined,
+      collectedToTime: filters.collectedToTime || undefined,
       // Only sent when opting out, since the API already defaults to hiding.
       hideClosed: filters.hideClosed === "false" ? "false" : undefined,
       pipeline: filters.pipeline as BusinessFiltersInput["pipeline"],

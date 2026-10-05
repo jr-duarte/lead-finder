@@ -7,6 +7,8 @@ import type { DateRange } from "react-day-picker"
 import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Popover,
   PopoverContent,
@@ -39,15 +41,28 @@ function toIsoDay(date?: Date): string {
   return `${year}-${month}-${day}`
 }
 
-/** Date-picker range filter for the collection date. */
+type Range = { from: string; to: string; fromTime: string; toTime: string }
+
+/** "01/10/2026" or "01/10/2026 08:00". */
+function withTime(date: Date | undefined, time: string): string {
+  return time ? `${formatDate(date)} ${time}` : formatDate(date)
+}
+
+/** Date-picker range filter for the collection date, with optional times. */
 export function DateRangeFilter({
   from,
   to,
+  fromTime,
+  toTime,
   onChange,
 }: {
   from: string
   to: string
-  onChange: (range: { from: string; to: string }) => void
+  /** "HH:mm"; only applies while `from` is set. */
+  fromTime: string
+  /** "HH:mm"; only applies while `to` is set. */
+  toTime: string
+  onChange: (range: Range) => void
 }) {
   const [open, setOpen] = React.useState(false)
 
@@ -62,12 +77,15 @@ export function DateRangeFilter({
     if (!from && !to) return "Qualquer data"
     const fromDate = toDate(from)
     const toDateValue = toDate(to)
-    if (from && to && from === to) return formatDate(fromDate)
+    if (from && to && from === to) {
+      if (!fromTime && !toTime) return formatDate(fromDate)
+      return `${formatDate(fromDate)}, ${fromTime || "00:00"} – ${toTime || "23:59"}`
+    }
     if (from && to)
-      return `${formatDate(fromDate)} – ${formatDate(toDateValue)}`
-    if (from) return `A partir de ${formatDate(fromDate)}`
-    return `Até ${formatDate(toDateValue)}`
-  }, [from, to])
+      return `${withTime(fromDate, fromTime)} – ${withTime(toDateValue, toTime)}`
+    if (from) return `A partir de ${withTime(fromDate, fromTime)}`
+    return `Até ${withTime(toDateValue, toTime)}`
+  }, [from, to, fromTime, toTime])
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -92,21 +110,69 @@ export function DateRangeFilter({
           // With a full range picked, a click starts a new one instead of
           // moving one of its ends.
           resetOnSelect
+          // The popover stays open after a range is picked, so the times can
+          // be set right below it.
           onSelect={(range) => {
-            onChange({ from: toIsoDay(range?.from), to: toIsoDay(range?.to) })
-            if (range?.from && range.to) setOpen(false)
+            const nextFrom = toIsoDay(range?.from)
+            const nextTo = toIsoDay(range?.to)
+            onChange({
+              from: nextFrom,
+              to: nextTo,
+              // A time without its day would be ignored, so it is dropped.
+              fromTime: nextFrom ? fromTime : "",
+              toTime: nextTo ? toTime : "",
+            })
           }}
         />
-        <div className="flex justify-end border-t p-2">
+        <div className="grid grid-cols-2 gap-3 border-t p-3">
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="collected-from-time"
+              className="text-muted-foreground text-xs"
+            >
+              Hora inicial
+            </Label>
+            <Input
+              id="collected-from-time"
+              type="time"
+              value={fromTime}
+              disabled={!from}
+              onChange={(event) =>
+                onChange({ from, to, fromTime: event.target.value, toTime })
+              }
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="collected-to-time"
+              className="text-muted-foreground text-xs"
+            >
+              Hora final
+            </Label>
+            <Input
+              id="collected-to-time"
+              type="time"
+              value={toTime}
+              disabled={!to}
+              onChange={(event) =>
+                onChange({ from, to, fromTime, toTime: event.target.value })
+              }
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t p-2">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
-              onChange({ from: "", to: "" })
+              onChange({ from: "", to: "", fromTime: "", toTime: "" })
               setOpen(false)
             }}
           >
             Limpar data
+          </Button>
+          <Button size="sm" onClick={() => setOpen(false)}>
+            Aplicar
           </Button>
         </div>
       </PopoverContent>
