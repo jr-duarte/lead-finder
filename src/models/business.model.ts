@@ -49,6 +49,7 @@ const enrichmentSchema = new Schema(
     socials: { type: socialSchema, default: () => ({}) },
     websiteStatus: Number,
     websiteTitle: String,
+    websiteBroken: Boolean,
     technologies: { type: [String], default: [] },
     error: String,
   },

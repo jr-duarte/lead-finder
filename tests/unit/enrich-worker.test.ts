@@ -33,6 +33,7 @@ describe("enrichOne", () => {
     expect(result.ok).toBe(true)
     expect(result.websiteStatus).toBe(200)
     expect(result.websiteTitle).toBe("Loja")
+    expect(result.websiteBroken).toBe(false)
     expect(result.emails).toEqual(["oi@loja.com.br"])
     expect(result.socials.instagram).toBe("loja.oficial")
   })
@@ -74,7 +75,20 @@ describe("enrichOne", () => {
 
     expect(result.ok).toBe(false)
     expect(result.websiteStatus).toBe(404)
+    expect(result.websiteBroken).toBe(true)
     expect(result.error).toMatch(/404/)
+  })
+
+  it("não marca como fora do ar um site que só bloqueia robôs", async () => {
+    const fetchImpl = vi.fn(async () => htmlResponse("nope", 403))
+
+    const result = await enrichOne(
+      { id: "6", name: "Bloqueado", website: "https://bloqueado.com.br" },
+      { ...CONFIG, fetchImpl: fetchImpl as unknown as typeof fetch }
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.websiteBroken).toBe(false)
   })
 
   it("does not throw when the request fails", async () => {
@@ -88,6 +102,7 @@ describe("enrichOne", () => {
     )
 
     expect(result.ok).toBe(false)
+    expect(result.websiteBroken).toBe(true)
     // The raw code is translated into something the user can act on.
     expect(result.error).toMatch(/recusou a conexão/)
   })

@@ -202,6 +202,7 @@ export function BusinessFilters({
                   {option.label} website
                 </SelectItem>
               ))}
+              <SelectItem value="broken">Com website fora do ar</SelectItem>
             </SelectContent>
           </Select>
         </div>

@@ -73,6 +73,8 @@ export type BusinessEnrichment = {
   socials: BusinessSocial
   websiteStatus?: number
   websiteTitle?: string
+  /** The site exists but does not work; set by the enrichment. */
+  websiteBroken?: boolean
   technologies: string[]
   error?: string
 }

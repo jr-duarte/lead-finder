@@ -702,6 +702,25 @@ export function BusinessDetailView({ id }: { id: string }) {
                       <Fallback />
                     )}
                   </Field>
+                  <Field label="Site">
+                    {business.enrichment.websiteBroken === undefined ? (
+                      <Fallback />
+                    ) : business.enrichment.websiteBroken ? (
+                      <Badge
+                        variant="outline"
+                        className="border-destructive/40 text-destructive bg-destructive/10"
+                      >
+                        Fora do ar
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="border-success/40 text-success bg-success/10"
+                      >
+                        Funcionando
+                      </Badge>
+                    )}
+                  </Field>
                   <Field label="Tecnologias">
                     {business.enrichment.technologies?.length ? (
                       <div className="flex flex-wrap gap-1.5">

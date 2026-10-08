@@ -27,6 +27,18 @@ export async function register() {
       console.error("[leads] falha ao classificar telefones", error)
     })
 
+  // Sites enriched before the "not working" flag existed get it, so the
+  // website filter sees them.
+  void businessRepository
+    .backfillWebsiteBroken()
+    .then((count) => {
+      if (count > 0)
+        console.info(`[leads] situação do site em ${count} lead(s)`)
+    })
+    .catch((error) => {
+      console.error("[leads] falha ao classificar sites", error)
+    })
+
   // Campaigns resume where they stopped; the send queue waits for WhatsApp.
   const { campaignService } =
     await import("@/services/campaign/campaign.service")

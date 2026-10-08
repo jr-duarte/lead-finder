@@ -134,6 +134,15 @@ export const businessService = {
       patch["enrichment.socials.instagram"] = instagram || undefined
     }
 
+    // The "not working" verdict was about the old address; the next
+    // enrichment judges the new one.
+    if (rest.website !== undefined) {
+      const current = await businessRepository.findById(id)
+      if ((current?.website ?? "") !== rest.website) {
+        patch["enrichment.websiteBroken"] = undefined
+      }
+    }
+
     return businessRepository.update(id, patch)
   },
 
@@ -236,6 +245,15 @@ export const businessService = {
       {
         header: "Titulo do site",
         value: (b) => b.enrichment.websiteTitle,
+      },
+      {
+        header: "Site fora do ar",
+        value: (b) =>
+          b.enrichment.websiteBroken === undefined
+            ? undefined
+            : b.enrichment.websiteBroken
+              ? "Sim"
+              : "Nao",
       },
       {
         header: "Erro do enriquecimento",

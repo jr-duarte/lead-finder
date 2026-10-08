@@ -38,7 +38,8 @@ export const businessFiltersSchema = z.object({
   state: optionalString,
   minRating: z.coerce.number().min(0).max(5).optional(),
   minReviews: z.coerce.number().int().min(0).optional(),
-  website: presenceSchema.default("any"),
+  /** "broken": has a website, but the enrichment found it not working. */
+  website: z.enum(["any", "yes", "no", "broken"]).default("any"),
   phone: presenceSchema.default("any"),
   instagram: presenceSchema.default("any"),
   /** "yes": a mobile phone or a WhatsApp link from the site. */

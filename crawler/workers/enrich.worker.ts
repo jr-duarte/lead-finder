@@ -30,6 +30,11 @@ export type EnrichmentOutcome = {
   }
   websiteStatus?: number
   websiteTitle?: string
+  /**
+   * The registered site exists but does not work (gone, server error,
+   * unreachable). False once it answers; absent when there is no site.
+   */
+  websiteBroken?: boolean
   technologies: string[]
   /** CNPJ on record or found on the site; absent when neither had one. */
   cnpj?: string
@@ -124,6 +129,14 @@ export function describeHttpFailure(status: number): string {
     return `O site está fora do ar (erro ${status} no servidor dele). Tente novamente mais tarde.`
   }
   return `O site respondeu com status ${status}.`
+}
+
+/**
+ * Whether an HTTP failure means the site is broken. 401/403/429 are left out:
+ * the site works for people, it only turns robots away.
+ */
+export function isBrokenHttpStatus(status: number): boolean {
+  return status === 404 || status === 410 || status >= 500
 }
 
 /** Network-level failures rarely carry a message a user can act on. */
@@ -228,6 +241,7 @@ export async function enrichOne(
       return {
         ...base,
         websiteStatus: response.status,
+        websiteBroken: isBrokenHttpStatus(response.status),
         error: describeHttpFailure(response.status),
       }
     }
@@ -284,6 +298,7 @@ export async function enrichOne(
       registryError: lookup && !lookup.ok ? lookup.error : undefined,
       websiteStatus: response.status,
       websiteTitle: extraction.title,
+      websiteBroken: false,
       emails: extraction.emails,
       socials: {
         instagram: extraction.instagram,
@@ -295,8 +310,11 @@ export async function enrichOne(
     }
   } catch (error) {
     const aborted = error instanceof Error && error.name === "AbortError"
+    // Timeouts, DNS, refused connections and bad certificates all leave a
+    // visitor without a working site.
     return {
       ...base,
+      websiteBroken: true,
       error: aborted
         ? "Tempo limite excedido ao acessar o site. Ele pode estar lento ou fora do ar."
         : describeNetworkFailure(error),

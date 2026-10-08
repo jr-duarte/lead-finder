@@ -27,6 +27,15 @@ describe("buildBusinessQuery", () => {
     })
   })
 
+  it("matches businesses whose website is not working", () => {
+    const query = buildBusinessQuery(parse({ website: "broken" }))
+
+    expect(query.$and).toContainEqual({
+      website: { $exists: true, $nin: [null, ""] },
+    })
+    expect(query.$and).toContainEqual({ "enrichment.websiteBroken": true })
+  })
+
   it("matches businesses that do have a website", () => {
     const query = buildBusinessQuery(parse({ website: "yes" }))
 

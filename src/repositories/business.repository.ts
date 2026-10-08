@@ -124,8 +124,15 @@ export function buildBusinessQuery(
     and.push({ reviewsCount: { $gte: filters.minReviews } })
   }
 
-  const website = presenceCondition("website", filters.website ?? "any")
-  if (website) and.push(website)
+  if (filters.website === "broken") {
+    and.push(
+      { website: { $exists: true, $nin: [null, ""] } },
+      { "enrichment.websiteBroken": true }
+    )
+  } else {
+    const website = presenceCondition("website", filters.website ?? "any")
+    if (website) and.push(website)
+  }
 
   const phone = presenceCondition("phone", filters.phone ?? "any")
   if (phone) and.push(phone)
@@ -276,6 +283,7 @@ function toBusiness(raw: RawBusiness): Business {
       },
       websiteStatus: raw.enrichment?.websiteStatus ?? undefined,
       websiteTitle: raw.enrichment?.websiteTitle ?? undefined,
+      websiteBroken: raw.enrichment?.websiteBroken ?? undefined,
       technologies: raw.enrichment?.technologies ?? [],
       error: raw.enrichment?.error ?? undefined,
     },
@@ -480,6 +488,62 @@ export const businessRepository = {
     })
     if (updates.length > 0) await BusinessModel.bulkWrite(updates)
     return updates.length
+  },
+
+  /**
+   * Fills websiteBroken for sites enriched before it existed, from the HTTP
+   * status and error already stored. Only leads still missing it are touched,
+   * so it is cheap on every start.
+   */
+  async backfillWebsiteBroken(): Promise<number> {
+    await connectToDatabase()
+    const pending = {
+      website: { $exists: true, $nin: [null, ""] },
+      "enrichment.enrichedAt": { $exists: true },
+      "enrichment.websiteBroken": { $exists: false },
+    }
+
+    const [ok, brokenStatus, otherStatus, unreachable] = await Promise.all([
+      BusinessModel.updateMany(
+        { ...pending, status: "ENRICHED" },
+        { $set: { "enrichment.websiteBroken": false } }
+      ).exec(),
+      BusinessModel.updateMany(
+        {
+          ...pending,
+          status: "ENRICHMENT_FAILED",
+          $or: [
+            { "enrichment.websiteStatus": { $in: [404, 410] } },
+            { "enrichment.websiteStatus": { $gte: 500 } },
+          ],
+        },
+        { $set: { "enrichment.websiteBroken": true } }
+      ).exec(),
+      BusinessModel.updateMany(
+        {
+          ...pending,
+          status: "ENRICHMENT_FAILED",
+          "enrichment.websiteStatus": { $exists: true, $nin: [404, 410, null] },
+          $nor: [{ "enrichment.websiteStatus": { $gte: 500 } }],
+        },
+        { $set: { "enrichment.websiteBroken": false } }
+      ).exec(),
+      // No status at all: the request never got an answer.
+      BusinessModel.updateMany(
+        {
+          ...pending,
+          status: "ENRICHMENT_FAILED",
+          "enrichment.websiteStatus": { $in: [null] },
+          "enrichment.error": { $exists: true, $nin: [null, ""] },
+        },
+        { $set: { "enrichment.websiteBroken": true } }
+      ).exec(),
+    ])
+
+    return [ok, brokenStatus, otherStatus, unreachable].reduce(
+      (total, result) => total + (result.modifiedCount ?? 0),
+      0
+    )
   },
 
   /** The WhatsApp texts of every saved approach, for bulk text fixes. */

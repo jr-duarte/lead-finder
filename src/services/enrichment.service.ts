@@ -131,6 +131,7 @@ async function persistOutcome(outcome: EnrichmentOutcome): Promise<void> {
     "enrichment.socials.linkedin": outcome.socials.linkedin,
     "enrichment.websiteStatus": outcome.websiteStatus,
     "enrichment.websiteTitle": outcome.websiteTitle,
+    "enrichment.websiteBroken": outcome.websiteBroken,
     "enrichment.technologies": outcome.technologies,
     "enrichment.error": outcome.error,
     status: outcome.ok ? "ENRICHED" : "ENRICHMENT_FAILED",
