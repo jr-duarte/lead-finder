@@ -1,3 +1,5 @@
+import { bootWithRetry } from "@/lib/boot-retry"
+
 /**
  * Runs once when the Next.js server starts. If a WhatsApp session was saved,
  * it reconnects and syncs what arrived while the CRM was closed, and open
@@ -42,14 +44,10 @@ export async function register() {
   // Campaigns resume where they stopped; the send queue waits for WhatsApp.
   const { campaignService } =
     await import("@/services/campaign/campaign.service")
-  void campaignService.boot().catch((error) => {
-    console.error("[campanha] falha ao retomar campanhas", error)
-  })
+  bootWithRetry("campanha", () => campaignService.boot())
 
   // Follow-ups: leads in "Contatado" that did not answer get one more message.
   const { followUpService } =
     await import("@/services/follow-up/follow-up.service")
-  void followUpService.boot().catch((error) => {
-    console.error("[follow-up] falha ao iniciar", error)
-  })
+  bootWithRetry("follow-up", () => followUpService.boot())
 }
