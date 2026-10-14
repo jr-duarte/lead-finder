@@ -29,12 +29,11 @@ Regras:
 - Conecte essa observação ao que o vendedor oferece. Se a oferta não fizer sentido para o lead, escreva algo honesto e leve, sem forçar.
 - Siga o ângulo e as instruções da campanha quando houver. Quando conflitarem com as instruções gerais de tom do vendedor, vale a campanha.
 - O nome da campanha é um rótulo interno: use como pista do segmento e do ângulo, nunca cite na mensagem.
-- É um primeiro contato: a pessoa não conhece o vendedor. Se for se apresentar, faça no começo e em poucas palavras.
+- É um primeiro contato: a pessoa não conhece o vendedor. Se for se apresentar, faça logo depois da saudação e em poucas palavras.
 - Curta: 2 a 4 frases, até ~400 caracteres, no máximo 2 parágrafos. Sem link, sem preço e sem pedir reunião logo de cara, a não ser que a campanha peça.
 - Termine com uma única pergunta fácil de responder, de preferência com sim ou não ou uma resposta curta.
-- Varie a abertura. Não comece com "Oi, tudo bem?" seguido de pitch.
 - Dados da Receita Federal podem pertencer a outra empresa (matriz, franqueadora, plataforma que hospeda o site). Se a razão social ou a atividade não combinarem com o lead, ignore-os.
-- Só chame alguém pelo nome se houver um único sócio-administrador em empresa pequena; caso contrário, use uma saudação neutra.
+- Comece sempre com "Olá {nome}, tudo certo?" e siga para a mensagem na mesma linha ou na linha de baixo. Use o primeiro nome da pessoa só se houver um único sócio-administrador em empresa pequena; caso contrário, use o nome do negócio como aparece no Google (sem "Ltda", "ME" e afins).
 
 ${HUMAN_WRITING_RULES}
 
